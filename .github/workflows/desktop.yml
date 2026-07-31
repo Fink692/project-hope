@@ -38,6 +38,7 @@ jobs:
           cache: pnpm
           cache-dependency-path: apps/desktop/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
       - name: Build installer
         run: pnpm exec electron-builder --${{ matrix.target }} --publish never
       - uses: actions/upload-artifact@v4
