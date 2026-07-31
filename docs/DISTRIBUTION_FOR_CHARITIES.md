@@ -5,7 +5,7 @@ Project Hope is designed to feel like one normal app, even though it has a web c
 ## What a charity receives
 
 1. A single secure Project Hope web address, such as `https://hope.example.org`.
-2. A desktop installation from the browser—Windows, macOS, or ChromeOS.
+2. A native desktop installer for Windows, macOS, or Linux. A browser-installable version is also available for ChromeOS.
 3. An iPhone and Android app built from the same Project Hope workspace.
 4. One sign-in, one organization boundary, and the same records on every device.
 
@@ -15,7 +15,7 @@ Staff do not install Docker, configure databases, manage backups, or learn devel
 
 ### Desktop
 
-Open the Project Hope address in Chrome or Edge. Choose the install icon in the address bar or browser menu, then choose **Install Project Hope**. It will appear like a normal desktop application and open in its own window.
+The setup partner sends a Project Hope installer for Windows, macOS, or Linux. Install it like any normal application; it creates the desktop/Start menu entry, opens the hosted workspace, and updates through signed releases. A browser-installable version is also available: open the address in Chrome or Edge, choose the install icon or browser menu, then choose **Install Project Hope**.
 
 On Safari, choose **File → Add to Dock** on supported macOS versions.
 

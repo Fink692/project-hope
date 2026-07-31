@@ -24,6 +24,7 @@ describe("Project Hope web shell", () => {
     expect(screen.getByRole("link", { name: "Skip to main content" })).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Primary navigation" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Get started" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Download installer" })).toHaveAttribute("href", "https://github.com/Fink692/project-hope/releases/latest");
     expect(screen.getByRole("heading", { name: "You should not need to be technical to get started." })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Install Project Hope like an app." })).toBeInTheDocument();
     expect(screen.getByRole("main")).toHaveAttribute("id", "main-content");

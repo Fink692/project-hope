@@ -17,5 +17,7 @@ dist/
 .expo-export/
 .expo-export-ci/
 .expo-export-*/
+apps/desktop/dist/
+apps/desktop/release*/
 coverage/
 .DS_Store
