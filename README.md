@@ -1,61 +1,127 @@
 # Project Hope
 
-**A calm, controlled operating system for community impact.**
+### One calm workspace for the people doing the work.
 
 [![Quality gate](https://github.com/Fink692/project-hope/actions/workflows/ci.yml/badge.svg)](https://github.com/Fink692/project-hope/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/Fink692/project-hope?display_name=tag&color=1f7a5a)](https://github.com/Fink692/project-hope/releases)
-[![Architecture](https://img.shields.io/badge/dependencies-self--hosted%20%26%20local--first-235347)](docs/full-build-status.md)
+[![Latest release](https://img.shields.io/github/v/release/Fink692/project-hope?display_name=tag&color=1f7a5a)](https://github.com/Fink692/project-hope/releases/latest)
+[![License](https://img.shields.io/badge/data-charity--controlled-235347)](docs/full-build-status.md)
 
-Project Hope is a self-hosted, local-first operations platform for charities. It brings identity, CRM, volunteers, scheduling, documents, bounded AI, email, analytics, grants, resources, translation, accessibility, PWA/offline workflows, voice safety controls, donor insights, plugins, a public API, and native mobile field workflows into one auditable workspace.
+Project Hope gives charities one connected place to coordinate people, programs, volunteers, documents, schedules, grants, communications, and impact work.
 
-The product is designed around a simple promise: **charities keep control of their data, people stay in the loop, and useful operations continue even when AI is disabled.**
+It works like a normal app: staff install it, sign in, and get to work. The desktop, iPhone, and Android clients all use the same hosted organization workspace, so nobody has to keep separate copies of the truth.
 
-## Why it stands out
+## Start here
 
-| Built for trust | Built for momentum |
+| You are here for… | Go to… |
 |---|---|
-| Organization-scoped access, RBAC, audit history, legal holds, data minimization, and safe upload handling | One workspace for frontline work, volunteers, grants, resources, communications, scheduling, and impact operations |
-| Deterministic AI fallback, bounded gateway, explicit review states, and no unrestricted autonomous agents | Self-hosted PostgreSQL/pgvector, Valkey, Keycloak, Mailpit, Caddy, and optional local model runtimes |
-| Accessible web/mobile surfaces, keyboard-first workflows, reduced-motion support, and fail-closed production configuration | React + TypeScript web PWA, Expo mobile client, Django API, worker, public API, and production Compose topology |
+| Installing the app | [Download the latest desktop installers](https://github.com/Fink692/project-hope/releases/latest) |
+| Understanding the charity experience | [Project Hope as an app](docs/DISTRIBUTION_FOR_CHARITIES.md) |
+| Deploying a workspace for a charity | [Production deployment guide](docs/operations/production-deployment.md) |
+| Running a local training workspace | [Getting Started for Charities](docs/GETTING_STARTED_FOR_CHARITIES.md) |
+| Reviewing what is built | [Full build status](docs/full-build-status.md) |
 
-## Product surface
+## The charity experience
 
-- **Coordinate:** contacts, households, relationships, consent, volunteers, programs, events, shifts, waitlists, and iCalendar export.
-- **Understand:** secure documents, bounded extraction, search, analytics, grants, evidence workflows, resources, translation, and donor insights.
-- **Communicate safely:** minimized mailbox imports, injection flags, draft approval, SMTP delivery, voice consent, callbacks, and transfer controls.
-- **Extend responsibly:** governed plugin catalogue, scoped public API clients, capability tokens, append-only audit events, and explicit human review.
+1. A setup partner deploys one secure Project Hope workspace.
+2. The partner sends staff the installer or app download link.
+3. Staff install Project Hope, sign in, and start working.
+4. Records, permissions, review history, and updates stay connected across devices.
 
-The repository follows the research recommendation of a modular monolith first:
+Staff do not install Docker, configure databases, manage backups, learn developer commands, or maintain local copies of the system.
 
-- `services/core`: Django + Django REST Framework domain and API foundation
-- `apps/web`: React + TypeScript + Vite workspace and PWA shell
-- `apps/mobile`: Expo/React Native authenticated field-workflow client
-- `deploy/podman`: local single-node services and reverse proxy configuration
-- `docs`: requirements, architecture, threat model, operations, and decisions
+### Download the desktop app
 
-The platform remains useful with AI disabled. Any AI-like operation uses bounded deterministic adapters or a replaceable local gateway, with review state and audit coverage for consequential outputs.
+The [latest release](https://github.com/Fink692/project-hope/releases/latest) includes:
 
-> **Release status:** Project Hope 1.0 is a release-hardened, self-hosted product baseline. See the [full build status](docs/full-build-status.md) for the verification record and the [production deployment guide](docs/operations/production-deployment.md) for operator-owned launch gates.
+- **Windows:** one-click NSIS installer (`.exe`)
+- **macOS:** disk image and archive (`.dmg`, `.zip`)
+- **Linux:** AppImage and Debian package (`.AppImage`, `.deb`)
 
-## Quick start
+A generic desktop installer asks for the organization’s Project Hope address once, checks the connection, remembers it, and opens the workspace from then on. A setup partner can also build a preconfigured installer so staff only install and open it.
 
-### Easiest path for a charity team
+ChromeOS and supported browsers can use the browser-installable version. iPhone and Android builds use the same sign-in and hosted workspace; publishing them to the App Store and Google Play requires the organization’s own developer accounts and signing credentials.
 
-You do not need to learn Docker or Podman commands. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) or [Podman Desktop](https://podman-desktop.io/downloads), open it, then run the guided helper:
+## What is inside
+
+- **Coordinate:** contacts, households, relationships, consent, volunteers, programs, events, shifts, waitlists, and calendar export.
+- **Understand:** documents, bounded extraction, search, analytics, grants, evidence workflows, resources, translation, and donor insights.
+- **Communicate safely:** minimized mailbox imports, injection flags, draft approval, email delivery, voice consent, callbacks, and transfer controls.
+- **Extend responsibly:** governed plugins, scoped public API clients, capability tokens, append-only audit events, and human review.
+
+The platform remains useful with AI disabled. AI features use bounded, replaceable adapters and keep consequential outputs reviewable by people.
+
+## Built for trust
+
+- Organization-scoped access, roles, permissions, audit history, and legal holds
+- Charity-controlled data with replaceable self-hosted infrastructure
+- Human approval before consequential actions
+- Accessible keyboard-first interfaces with reduced-motion support
+- Safe upload handling, data minimization, and fail-closed production configuration
+- No paid AI API or cloud service is a required dependency
+
+## For setup partners
+
+The setup partner owns the one-time technical launch:
+
+- deploy the production Compose stack;
+- connect the organization’s domain and HTTPS;
+- configure identity, MFA, email, secrets, backups, and monitoring;
+- create the organization’s mobile build/signing configuration;
+- run a synthetic-data staging test;
+- build a preconfigured desktop installer.
+
+On Windows, the preconfigured installer command is:
+
+```powershell
+.\scripts\build-desktop.ps1 -ServerUrl "https://hope.example.org"
+```
+
+Read the [desktop installer guide](apps/desktop/README.md) and [production deployment guide](docs/operations/production-deployment.md) before handing an installer to staff. Code-signing certificates and the real production workspace URL are intentionally organization-owned launch requirements.
+
+## Local training workspace
+
+The local stack is for training, demonstrations, and technical support. It is not the normal staff distribution path.
+
+### Windows
+
+Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) or [Podman Desktop](https://podman-desktop.io/downloads), open it, then run:
 
 ```powershell
 .\scripts\project-hope.ps1 setup
 ```
 
-On macOS or Linux:
+### macOS or Linux
 
 ```bash
 bash scripts/project-hope.sh setup
 ```
 
-It starts the local workspace, waits for the health check, opens the browser, and shows the demo sign-in. The [plain-language charity guide](docs/GETTING_STARTED_FOR_CHARITIES.md) explains the setup, daily commands, and how to get help.
+The helper starts the local workspace, waits for health, opens the browser, and shows the demo sign-in. See [Getting Started for Charities](docs/GETTING_STARTED_FOR_CHARITIES.md) for the plain-language walkthrough.
 
-### Local Python development
+## Developer workspace
+
+The repository is organized as a modular monolith with replaceable clients:
+
+| Area | Location |
+|---|---|
+| Domain API and workers | `services/core` |
+| Web app and PWA shell | `apps/web` |
+| Native mobile client | `apps/mobile` |
+| Native desktop installers | `apps/desktop` |
+| Compose and reverse proxy | `deploy/podman` |
+| Architecture, operations, and decisions | `docs` |
+
+### Web development
+
+```powershell
+cd apps/web
+pnpm install
+pnpm dev
+```
+
+The web shell runs at `http://127.0.0.1:5173/` and proxies `/api` to Django.
+
+### API development
 
 ```powershell
 cd services/core
@@ -68,27 +134,7 @@ python manage.py seed_demo
 python manage.py runserver
 ```
 
-The API is available at `http://127.0.0.1:8000/api/v1/healthz/`.
-
-### Web development
-
-```powershell
-cd apps/web
-pnpm install
-pnpm dev
-```
-
-The web shell is available at `http://127.0.0.1:5173/` and proxies `/api` to Django.
-
-### Podman single-node development environment
-
-```powershell
-podman compose -f deploy/podman/compose.yml up --build
-```
-
-This starts PostgreSQL with pgvector, Valkey, Keycloak, Mailpit, Django, the production-built web shell, the bounded AI gateway, and Caddy. See [local development](docs/operations/local-development.md) for environment variables, seeded credentials, and troubleshooting.
-
-## Verification
+### Verification
 
 ```powershell
 cd services/core
@@ -98,22 +144,25 @@ ruff check project audit identity
 mypy .
 
 cd ..\..\apps\web
-pnpm build
 pnpm test
+pnpm build
+
+cd ..\desktop
+pnpm install --frozen-lockfile
+pnpm run build
 ```
 
-The original foundation acceptance criteria are in [docs/phase-1-acceptance.md](docs/phase-1-acceptance.md). The complete roadmap is implemented as a release-hardened product baseline; module-specific verification and external-runtime notes are in [docs/full-build-status.md](docs/full-build-status.md).
+GitHub Actions also verifies the backend, web client, mobile client, desktop packaging matrix, onboarding helpers, Compose files, and production configuration.
 
-The complete roadmap status is documented in [docs/full-build-status.md](docs/full-build-status.md), including the public API contract, worker commands, PWA/mobile surfaces, and optional local model/telephony runtimes.
+## Release status
 
-For the intended charity experience, read [Project Hope as an app](docs/DISTRIBUTION_FOR_CHARITIES.md): one hosted workspace, native desktop installers, and matching iPhone/Android clients.
+The current public release is [Project Hope 1.3.2](https://github.com/Fink692/project-hope/releases/tag/v1.3.2), with native desktop installers attached. The [full build status](docs/full-build-status.md) records the implemented product surface and the remaining organization-owned launch requirements.
 
-## Project principles
+## Principles
 
-- Charity-controlled data and replaceable local infrastructure
-- Human approval before consequential actions
-- Explicit tenant and programme scope on every future domain record
-- Least privilege, append-only audit history, and data minimization
+- Charity-controlled data and replaceable infrastructure
+- Human authority over model authority
+- Explicit tenant and program scope
+- Least privilege and append-only audit history
 - Accessible interfaces and keyboard-first workflows
-- No paid API or cloud service is a required dependency
-- No unrestricted autonomous agents
+- Useful operations even when AI is disabled
