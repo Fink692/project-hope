@@ -1,0 +1,55 @@
+openapi: 3.1.0
+info:
+  title: Project Hope API
+  version: 1.0.0
+  description: Tenant-bound API for self-hosted charity operations.
+servers:
+  - url: /api/v1
+security:
+  - sessionCookie: []
+  - tokenAuth: []
+paths:
+  /healthz/:
+    get:
+      security: []
+      summary: Health and database readiness
+      responses:
+        '200': { description: Healthy }
+  /me/:
+    get:
+      summary: Current user and active organizations
+      responses:
+        '200': { description: Identity and memberships }
+  /auth/login/:
+    post:
+      security: []
+      summary: Sign in and receive a browser session plus native API token
+      responses:
+        '200': { description: Authenticated user and token }
+  /organizations/{slug}/contacts/:
+    parameters: [{ $ref: '#/components/parameters/OrganizationSlug' }]
+    get: { summary: List tenant contacts, responses: { '200': { description: Contacts } } }
+    post: { summary: Create a tenant contact, responses: { '201': { description: Created } } }
+  /organizations/{slug}/workflows/{id}/review/:
+    parameters: [{ $ref: '#/components/parameters/OrganizationSlug' }, { $ref: '#/components/parameters/Id' }]
+    post: { summary: Approve or reject a bounded workflow, responses: { '200': { description: Reviewed } } }
+  /organizations/{slug}/ai/v1/{operation}/:
+    parameters: [{ $ref: '#/components/parameters/OrganizationSlug' }, { name: operation, in: path, required: true, schema: { type: string } }]
+    post: { summary: Run one bounded local AI operation, responses: { '200': { description: Structured workflow result } } }
+  /public/v1/resources/:
+    get:
+      security:
+        - clientHeaders: []
+          clientSecret: []
+      summary: Read verified community resources with a scoped API client
+      responses:
+        '200': { description: Resource results }
+components:
+  securitySchemes:
+    sessionCookie: { type: apiKey, in: cookie, name: sessionid }
+    tokenAuth: { type: apiKey, in: header, name: Authorization, description: "Use Token <key>." }
+    clientHeaders: { type: apiKey, in: header, name: X-Project-Hope-Client }
+    clientSecret: { type: apiKey, in: header, name: X-Project-Hope-Secret }
+  parameters:
+    OrganizationSlug: { name: slug, in: path, required: true, schema: { type: string } }
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }

@@ -1,0 +1,148 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-hope}
+      POSTGRES_USER: ${POSTGRES_USER:-hope}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    volumes:
+      - hope-prod-db:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  valkey:
+    image: valkey/valkey:8-alpine
+    command: ["valkey-server", "--appendonly", "yes"]
+    volumes:
+      - hope-prod-valkey:/data
+    restart: unless-stopped
+
+  ai-gateway:
+    build:
+      context: ../..
+      dockerfile: services/ai-gateway/Dockerfile
+    environment:
+      AI_GATEWAY_ENV: production
+      AI_GATEWAY_TOKEN: ${AI_GATEWAY_TOKEN:?Set AI_GATEWAY_TOKEN}
+    expose:
+      - "9000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9000/healthz', timeout=2).read()"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+
+  core:
+    build:
+      context: ../..
+      dockerfile: services/core/Dockerfile
+    environment:
+      DJANGO_ENV: production
+      DJANGO_DEBUG: "false"
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Set DJANGO_SECRET_KEY}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:?Set DJANGO_ALLOWED_HOSTS},core,localhost
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:?Set DJANGO_CSRF_TRUSTED_ORIGINS}
+      DJANGO_TRUST_PROXY: "true"
+      DJANGO_SECURE_SSL_REDIRECT: "true"
+      DJANGO_HSTS_SECONDS: "31536000"
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
+      VALKEY_URL: redis://valkey:6379/0
+      SMTP_HOST: ${SMTP_HOST:?Set SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
+      SMTP_FROM: ${SMTP_FROM:?Set SMTP_FROM}
+      AI_GATEWAY_URL: http://ai-gateway:9000
+      AI_GATEWAY_TOKEN: ${AI_GATEWAY_TOKEN:?Set AI_GATEWAY_TOKEN}
+      AI_GATEWAY_TIMEOUT_SECONDS: ${AI_GATEWAY_TIMEOUT_SECONDS:-3}
+      PROJECT_HOPE_MAX_DOCUMENT_BYTES: ${PROJECT_HOPE_MAX_DOCUMENT_BYTES:-26214400}
+      PROJECT_HOPE_MAX_UNCOMPRESSED_DOCUMENT_BYTES: ${PROJECT_HOPE_MAX_UNCOMPRESSED_DOCUMENT_BYTES:-104857600}
+      PROJECT_HOPE_MAX_DOCUMENT_ARCHIVE_MEMBERS: ${PROJECT_HOPE_MAX_DOCUMENT_ARCHIVE_MEMBERS:-1000}
+    volumes:
+      - hope-prod-media:/workspace/services/core/media
+      - hope-prod-static:/workspace/services/core/staticfiles
+    command: ["sh", "-c", "python manage.py migrate --noinput && python manage.py collectstatic --noinput && gunicorn project.wsgi:application --bind 0.0.0.0:8000 --workers 3 --access-logfile - --error-logfile - --timeout 60"]
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      valkey:
+        condition: service_started
+      ai-gateway:
+        condition: service_healthy
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; request=urllib.request.Request('http://127.0.0.1:8000/api/v1/healthz/', headers={'Host':'core','X-Forwarded-Proto':'https'}); urllib.request.urlopen(request, timeout=2).read()"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: services/core/Dockerfile
+    environment:
+      DJANGO_ENV: production
+      DJANGO_DEBUG: "false"
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Set DJANGO_SECRET_KEY}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:?Set DJANGO_ALLOWED_HOSTS},core,localhost
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
+      SMTP_HOST: ${SMTP_HOST:?Set SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
+      SMTP_FROM: ${SMTP_FROM:?Set SMTP_FROM}
+      PROJECT_HOPE_WORKER_INTERVAL: ${PROJECT_HOPE_WORKER_INTERVAL:-60}
+    volumes:
+      - hope-prod-media:/workspace/services/core/media
+    command: ["sh", "-c", "python manage.py run_worker"]
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      core:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    expose:
+      - "80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1/ >/dev/null"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+
+  caddy:
+    image: caddy:2-alpine
+    environment:
+      HOPE_DOMAIN: ${HOPE_DOMAIN:?Set HOPE_DOMAIN}
+    ports:
+      - "${HOPE_HTTP_PORT:-80}:80"
+      - "${HOPE_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./Caddyfile.production:/etc/caddy/Caddyfile:ro
+      - hope-prod-caddy-data:/data
+      - hope-prod-caddy-config:/config
+      - hope-prod-static:/srv/static:ro
+    restart: unless-stopped
+    depends_on:
+      core:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+
+volumes:
+  hope-prod-db:
+  hope-prod-valkey:
+  hope-prod-media:
+  hope-prod-static:
+  hope-prod-caddy-data:
+  hope-prod-caddy-config:

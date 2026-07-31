@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://project-hope.local/schemas/workflow-result.json",
+  "title": "Project Hope workflow result",
+  "type": "object",
+  "required": ["workflowId", "state", "output", "riskFlags"],
+  "additionalProperties": false,
+  "properties": {
+    "workflowId": { "type": "string", "format": "uuid" },
+    "state": { "type": "string", "enum": ["created", "classified", "awaiting_context", "retrieving", "generating", "validating", "awaiting_review", "approved", "executing", "completed", "rejected", "failed", "cancelled"] },
+    "output": { "type": "object" },
+    "riskFlags": { "type": "array", "items": { "type": "string" } }
+  }
+}
+

@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "Project Hope",
+    "slug": "project-hope",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "scheme": "projecthope",
+    "web": { "bundler": "metro" },
+    "plugins": ["expo-secure-store"],
+    "ios": {
+      "bundleIdentifier": "org.projecthope.mobile",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "org.projecthope.mobile"
+    },
+    "runtimeVersion": { "policy": "appVersion" },
+    "extra": { "minimumServerVersion": "1.0.0" }
+  }
+}

@@ -1,0 +1,147 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: hope
+      POSTGRES_USER: hope
+      POSTGRES_PASSWORD: hope-development-only
+    volumes:
+      - hope-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hope -d hope"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  valkey:
+    image: valkey/valkey:8-alpine
+    command: ["valkey-server", "--save", "", "--appendonly", "no"]
+
+  ai-gateway:
+    build:
+      context: ../..
+      dockerfile: services/ai-gateway/Dockerfile
+    expose:
+      - "9000"
+    environment:
+      AI_GATEWAY_ENV: ${AI_GATEWAY_ENV:-development}
+      AI_GATEWAY_TOKEN: ${AI_GATEWAY_TOKEN:-}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9000/healthz', timeout=2).read()"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.2
+    command: ["start-dev", "--http-port=8080"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin-development-only
+    ports:
+      - "8081:8080"
+
+  mailpit:
+    image: axllent/mailpit:v1.24
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+
+  core:
+    build:
+      context: ../..
+      dockerfile: services/core/Dockerfile
+    environment:
+      DJANGO_ENV: development
+      DJANGO_DEBUG: "true"
+      DJANGO_SECRET_KEY: development-only-change-me
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,core,caddy
+      DJANGO_CSRF_TRUSTED_ORIGINS: http://localhost:8090
+      DJANGO_TRUST_PROXY: "false"
+      DATABASE_URL: postgresql://hope:hope-development-only@db:5432/hope
+      VALKEY_URL: redis://valkey:6379/0
+      DEMO_ADMIN_PASSWORD: change-me-now
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_STARTTLS: "false"
+      SMTP_FROM: Project Hope <noreply@project-hope.local>
+      AI_GATEWAY_URL: http://ai-gateway:9000
+      AI_GATEWAY_TOKEN: ${AI_GATEWAY_TOKEN:-}
+      AI_GATEWAY_TIMEOUT_SECONDS: "3"
+      PROJECT_HOPE_MAX_DOCUMENT_BYTES: "26214400"
+      PROJECT_HOPE_MAX_UNCOMPRESSED_DOCUMENT_BYTES: "104857600"
+      PROJECT_HOPE_MAX_DOCUMENT_ARCHIVE_MEMBERS: "1000"
+    volumes:
+      - hope-media:/workspace/services/core/media
+    command: ["sh", "-c", "python manage.py migrate --noinput && python manage.py seed_demo && python manage.py runserver 0.0.0.0:8000"]
+    depends_on:
+      db:
+        condition: service_healthy
+      valkey:
+        condition: service_started
+      mailpit:
+        condition: service_started
+      ai-gateway:
+        condition: service_started
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/healthz/', timeout=2).read()"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: services/core/Dockerfile
+    environment:
+      DJANGO_ENV: development
+      DJANGO_DEBUG: "true"
+      DJANGO_SECRET_KEY: development-only-change-me
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,core,worker,caddy
+      DATABASE_URL: postgresql://hope:hope-development-only@db:5432/hope
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_STARTTLS: "false"
+      PROJECT_HOPE_WORKER_INTERVAL: "60"
+    volumes:
+      - hope-media:/workspace/services/core/media
+    command: ["sh", "-c", "python manage.py run_worker"]
+    depends_on:
+      db:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+      core:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+    depends_on:
+      - core
+    expose:
+      - "80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1/ >/dev/null"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "${HOPE_HTTP_PORT:-8090}:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      core:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+
+volumes:
+  hope-db:
+  hope-media:

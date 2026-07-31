@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title>Project Hope</title>
+  <rect width="512" height="512" rx="128" fill="#1f5148"/>
+  <circle cx="256" cy="256" r="150" fill="#d5e2d6"/>
+  <path d="M178 150h72v78h80v-78h72v212h-72v-76h-80v76h-72z" fill="#1f5148"/>
+  <circle cx="388" cy="388" r="18" fill="#df765b"/>
+</svg>

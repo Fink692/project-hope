@@ -1,0 +1,14 @@
+{
+  "name": "Deterministic local safety adapter",
+  "immutable_identifier": "deterministic-local-adapter-v1",
+  "download_source": "built-in",
+  "checksum": "built-in",
+  "license": "Project Hope source license",
+  "intended_tasks": ["intent classification", "reviewable email drafting", "glossary translation", "accessibility draft"],
+  "prohibited_tasks": ["sending email", "grant submission", "eligibility decisions", "crisis advice", "permission changes", "arbitrary code"],
+  "quantization": "none",
+  "rollback_version": null,
+  "evaluation_status": "foundation test corpus only",
+  "note": "Replaceable local adapter. Production model entries must include immutable model checksums and licence evidence."
+}
+

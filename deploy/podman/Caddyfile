@@ -1,0 +1,26 @@
+:80 {
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+	}
+
+	handle /api/* {
+		reverse_proxy core:8000
+	}
+
+	redir /admin /admin/
+
+	handle /admin/* {
+		reverse_proxy core:8000
+	}
+
+	handle /static/* {
+		reverse_proxy core:8000
+	}
+
+	handle {
+		reverse_proxy web:80
+	}
+}

@@ -1,0 +1,21 @@
+{
+  "name": "Project Hope",
+  "short_name": "Hope",
+  "description": "Self-hosted charity operations workspace",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f4f0e8",
+  "theme_color": "#1f5148",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["productivity", "public-services"],
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Open workspace", "short_name": "Workspace", "url": "/#workspace", "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }] }
+  ]
+}

@@ -1,0 +1,8 @@
+[Unit]
+Description=Project Hope encrypted database and media backup
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/project-hope/backup.env
+ExecStart=/opt/project-hope/deploy/systemd/backup.sh
+
