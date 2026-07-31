@@ -190,6 +190,7 @@ function App() {
         <nav aria-label="Primary navigation">
           <a aria-current={activeModule === "overview" ? "page" : undefined} className={activeModule === "overview" ? "active" : ""} href="#overview" onClick={() => setActiveModule("overview")}>Overview</a>
           <a href="#workspace" onClick={() => setActiveModule(session ? "crm" : "overview")}>Workspace</a>
+          {!session && <a href="#getting-started">Get started</a>}
           <a href="#roadmap">Principles</a>
         </nav>
       </header>
@@ -221,6 +222,11 @@ function App() {
               <button aria-busy={loginBusy} className="button primary" disabled={loginBusy} type="submit">{loginBusy ? "Signing in…" : "Sign in"}</button>
               {loginError && <p className="form-error" role="alert">{loginError}</p>}
             </form>
+            <aside className="onboarding-card" aria-labelledby="onboarding-title">
+              <div><p className="eyebrow">New to Project Hope?</p><h3 id="onboarding-title">You should not need to be technical to get started.</h3><p>A coordinator can run one guided setup command, open this page, and invite the team. The plain-language guide explains every step.</p></div>
+              <ol className="onboarding-steps"><li><span>01</span><div><strong>Set up once</strong><small>Use the guided helper on the computer that will host the workspace.</small></div></li><li><span>02</span><div><strong>Open the workspace</strong><small>Project Hope checks its services and opens the browser for you.</small></div></li><li><span>03</span><div><strong>Start with one task</strong><small>Choose CRM, Volunteers, or Scheduling. Add more when your team is ready.</small></div></li></ol>
+              <a className="button secondary compact" href="https://github.com/Fink692/project-hope/blob/main/docs/GETTING_STARTED_FOR_CHARITIES.md" target="_blank" rel="noreferrer">Open the plain-language guide</a>
+            </aside>
           </section>
         )}
 

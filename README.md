@@ -39,6 +39,22 @@ The platform remains useful with AI disabled. Any AI-like operation uses bounded
 
 ## Quick start
 
+### Easiest path for a charity team
+
+You do not need to learn Docker or Podman commands. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) or [Podman Desktop](https://podman-desktop.io/downloads), open it, then run the guided helper:
+
+```powershell
+.\scripts\project-hope.ps1 setup
+```
+
+On macOS or Linux:
+
+```bash
+bash scripts/project-hope.sh setup
+```
+
+It starts the local workspace, waits for the health check, opens the browser, and shows the demo sign-in. The [plain-language charity guide](docs/GETTING_STARTED_FOR_CHARITIES.md) explains the setup, daily commands, and how to get help.
+
 ### Local Python development
 
 ```powershell

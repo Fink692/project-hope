@@ -1,5 +1,9 @@
 # Local development
 
+## If you are helping a charity team
+
+Start with the [plain-language charity guide](../GETTING_STARTED_FOR_CHARITIES.md) and use the guided helper. It checks Docker/Podman, starts the stack, waits for health, and gives the coordinator a browser address. The detailed developer commands below are for technical support and contributors.
+
 ## Supported baseline
 
 - Windows, Linux, or macOS for development
