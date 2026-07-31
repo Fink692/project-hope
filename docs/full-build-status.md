@@ -26,6 +26,7 @@ The complete roadmap is implemented as a release-hardened, self-hosted product b
 | Public API | Scoped client issuance, one-time secret, explicit scopes, rate limit, public resources endpoint | Client/API test |
 | Native mobile | Expo client with token authentication, secure storage, live tenant-scoped records, expiring safe snapshots, offline note, accessibility states, release configuration, and fail-closed production API URL handling | Frozen install, TypeScript check, Expo config, web export, and Expo doctor |
 | Charity onboarding | Guided Windows/macOS/Linux setup helper, friendly lifecycle commands, plain-language operator guide, and in-app first-run path | Helper doctor/setup smoke, web tests/build, live health/root smoke |
+| App distribution | Installable standalone web app, hosted-workspace distribution guide, and Expo iPhone/Android release configuration | PWA manifest/build, mobile Expo config/export, Expo Doctor, web tests/build |
 | Operations | Docker/Podman stack, worker, model registry, backups, retention/export commands, Django admin, reverse-proxy routing, production static volume | Dev and production Compose validation, startup smoke tests, static/admin route checks |
 
 ## Required external runtimes

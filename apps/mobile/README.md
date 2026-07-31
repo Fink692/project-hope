@@ -13,6 +13,8 @@ pnpm start
 
 Native distribution, device-management policy, encrypted storage validation, and remote sign-out testing are required before publishing to an app store.
 
+The intended charity distribution is one hosted Project Hope workspace plus the signed iPhone/Android clients. Staff download the app, sign in, and use the same organization data as the desktop installation; they do not configure a local server.
+
 Release profiles are in eas.json. Configure an organization-owned EAS project, signing credentials, privacy disclosures, and a real-device staging test before running the production profile. Set `EXPO_PUBLIC_API_URL` to the complete HTTPS API base (for example, `https://hope.example.org/api/v1`); release mode refuses to use a localhost fallback.
 
 For EAS, create the variable in the matching EAS environment before building:

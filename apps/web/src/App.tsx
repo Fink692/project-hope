@@ -35,6 +35,7 @@ type FormField = {
 };
 
 type RecordMap = Record<string, unknown>;
+type InstallPromptEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: "accepted" | "dismissed" }> };
 
 const modules: ModuleDefinition[] = [
   { id: "crm", label: "CRM", description: "People, households, consent, and relationships", endpoint: "contacts", color: "sage" },
@@ -128,6 +129,7 @@ async function request(path: string, init: RequestInit = {}) {
 function App() {
   const [health, setHealth] = useState<Health>({ status: "unknown", database: "unknown" });
   const [session, setSession] = useState<Session | null>(null);
+  const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
   const [activeModule, setActiveModule] = useState("overview");
   const [selectedOrganization, setSelectedOrganization] = useState("");
   const [loginEmail, setLoginEmail] = useState("demo@example.org");
@@ -140,6 +142,15 @@ function App() {
       ?? session?.organizations[0]?.organization,
     [selectedOrganization, session],
   );
+
+  useEffect(() => {
+    function rememberInstallPrompt(event: Event) {
+      event.preventDefault();
+      setInstallPrompt(event as InstallPromptEvent);
+    }
+    window.addEventListener("beforeinstallprompt", rememberInstallPrompt);
+    return () => window.removeEventListener("beforeinstallprompt", rememberInstallPrompt);
+  }, []);
 
   useEffect(() => {
     request("/api/v1/healthz/")
@@ -177,6 +188,13 @@ function App() {
     try { await request("/api/v1/auth/logout/", { method: "POST", body: "{}" }); } finally { setSession(null); }
   }
 
+  async function installApp() {
+    if (!installPrompt) return;
+    await installPrompt.prompt();
+    await installPrompt.userChoice;
+    setInstallPrompt(null);
+  }
+
   const selectedModule = modules.find((module) => module.id === activeModule);
 
   return (
@@ -203,6 +221,7 @@ function App() {
             <p className="hero-copy">Project Hope keeps charity data under the organization’s control, makes permissions visible, and leaves every consequential decision with a human.</p>
             <div className="hero-actions">
               <a className="button primary" href={session ? "#workspace" : "#sign-in"} onClick={() => session ? setActiveModule("crm") : undefined}>{session ? "Open workspace" : "Sign in to workspace"}</a>
+              {!session && <a className="button secondary" href="#download">Install the app</a>}
               <a className="button secondary" href="#roadmap">See the guardrails</a>
             </div>
           </div>
@@ -229,6 +248,8 @@ function App() {
             </aside>
           </section>
         )}
+
+        {!session && <section className="section download-section" id="download" aria-labelledby="download-title"><div className="section-heading"><div><p className="eyebrow">One workspace, every device</p><h2 id="download-title">Install Project Hope like an app.</h2></div><p>Your charity gets one hosted workspace. Staff can install it on desktop, use the mobile app, and see the same organization data everywhere.</p></div><div className="download-grid"><article className="download-card featured"><span className="card-number" aria-hidden="true">01</span><h3>Desktop app</h3><p>Install the browser app on Windows, macOS, or ChromeOS. It opens in its own window and updates automatically.</p>{installPrompt ? <button className="button primary compact" type="button" onClick={() => void installApp()}>Install Project Hope</button> : <small>Open your browser menu and choose “Install Project Hope” or “Add to dock”.</small>}</article><article className="download-card"><span className="card-number" aria-hidden="true">02</span><h3>iPhone and Android</h3><p>The Expo mobile client uses the same secure sign-in and hosted workspace for field work, schedules, volunteers, and tasks.</p><small>App Store builds are prepared by the organization’s setup partner with its own signing accounts.</small></article><article className="download-card"><span className="card-number" aria-hidden="true">03</span><h3>Everything connected</h3><p>No duplicate databases, file transfers, or per-device setup. One organization boundary, one login, one source of truth.</p><a className="button secondary compact" href="https://github.com/Fink692/project-hope/blob/main/docs/DISTRIBUTION_FOR_CHARITIES.md" target="_blank" rel="noreferrer">See how it works</a></article></div></section>}
 
         {session && currentOrganization && (
           <section className="section workspace" id="workspace" aria-labelledby="workspace-title">

@@ -106,6 +106,8 @@ The original foundation acceptance criteria are in [docs/phase-1-acceptance.md](
 
 The complete roadmap status is documented in [docs/full-build-status.md](docs/full-build-status.md), including the public API contract, worker commands, PWA/mobile surfaces, and optional local model/telephony runtimes.
 
+For the intended charity experience, read [Project Hope as an app](docs/DISTRIBUTION_FOR_CHARITIES.md): one hosted workspace, an installable desktop app, and matching iPhone/Android clients.
+
 ## Project principles
 
 - Charity-controlled data and replaceable local infrastructure

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Project Hope API
-  version: 1.1.0
+  version: 1.2.0
   description: Tenant-bound API for self-hosted charity operations.
 servers:
   - url: /api/v1
