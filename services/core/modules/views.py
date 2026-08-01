@@ -1353,9 +1353,7 @@ class AIOperationView(TenantView):
                     transform_type
                     == AccessibilityTransform.TransformType.PLAIN_LANGUAGE
                 ):
-                    gateway = call_ai_gateway(
-                        "v1/plain-language", {"text": original}
-                    )
+                    gateway = call_ai_gateway("v1/plain-language", {"text": original})
                     if gateway and isinstance(gateway.get("transformedText"), str):
                         gateway_used = True
                         gateway_model = str(gateway.get("model", gateway_model))
