@@ -3,6 +3,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 type Health = {
   status: "ok" | "degraded" | "unknown";
   database: "ok" | "unavailable" | "unknown";
+  ai?: { status: "ok" | "degraded" | "disabled" | "unavailable" | "unknown"; runtime?: string };
 };
 
 type Organization = {
@@ -157,8 +158,14 @@ function App() {
       .then((body: Partial<Health>) => setHealth({
         status: body.status === "ok" || body.status === "degraded" ? body.status : "unknown",
         database: body.database === "ok" || body.database === "unavailable" ? body.database : "unknown",
+        ai: body.ai && typeof body.ai === "object"
+          ? {
+            status: body.ai.status === "ok" || body.ai.status === "degraded" || body.ai.status === "disabled" || body.ai.status === "unavailable" ? body.ai.status : "unknown",
+            runtime: body.ai.runtime,
+          }
+          : { status: "unknown" },
       }))
-      .catch(() => setHealth({ status: "degraded", database: "unavailable" }));
+      .catch(() => setHealth({ status: "degraded", database: "unavailable", ai: { status: "unknown" } }));
     request("/api/v1/me/").then((body: Session) => {
       if (Array.isArray(body?.organizations)) setSession(body);
     }).catch(() => undefined);
@@ -228,7 +235,7 @@ function App() {
           <aside className="health-card" aria-labelledby="health-title">
             <div className="health-heading"><span className={`status-dot ${health.status}`} aria-hidden="true" /><h3 id="health-title">Local system status</h3></div>
             <p className="health-status" role="status">{health.status === "ok" ? "Ready for local work" : health.status === "unknown" ? "Checking services…" : "Needs attention"}</p>
-            <dl className="health-details"><div><dt>Core service</dt><dd>{health.status}</dd></div><div><dt>Database</dt><dd>{health.database}</dd></div></dl>
+            <dl className="health-details"><div><dt>Core service</dt><dd>{health.status}</dd></div><div><dt>Database</dt><dd>{health.database}</dd></div><div><dt>AI runtime</dt><dd>{health.ai?.status ?? "unknown"}{health.ai?.runtime && health.ai.runtime !== "ollama" ? ` · ${health.ai.runtime}` : ""}</dd></div></dl>
           </aside>
         </section>
 

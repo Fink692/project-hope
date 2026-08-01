@@ -12,7 +12,7 @@ The complete roadmap is implemented as a release-hardened, self-hosted product b
 | Volunteers | Applications, pipeline review, profiles, skills, availability | Acceptance/review test |
 | Scheduling | Programs, events, shifts, waitlist, iCalendar export | Calendar test |
 | Documents | Secure model, uploaded-file metadata, extraction, passages, search | Extraction/search test |
-| AI gateway/workflows | Local bounded gateway, schema-shaped outputs, risk flags, review states | Workflow and gateway smoke tests |
+| AI gateway/workflows | Ollama-backed local chat and embedding models with deterministic fail-closed fallback, schema-shaped outputs, risk flags, review states, and model readiness health | Live Ollama smoke checks, gateway unit tests, workflow tests |
 | Email assistant | Mailbox/message records, IMAP minimization, drafting, approval, SMTP send | Mailpit/container test |
 | Analytics | Metric definitions, snapshots, summaries | Metrics test |
 | Grants | Workspaces, questions, evidence workflow, deterministic budget validation | Budget test |
@@ -32,11 +32,12 @@ The complete roadmap is implemented as a release-hardened, self-hosted product b
 
 ## Required external runtimes
 
-The software paths are implemented without paid dependencies. A charity may add local Tika/OCRmyPDF/Tesseract, Docling, Whisper/faster-whisper, Kokoro, Asterisk/SIP, Keycloak/OIDC federation, and a real local LLM by configuring the documented sidecar boundaries. The deterministic adapter remains the safe fallback when those runtimes are absent; it never claims semantic model quality or performs side effects.
+The software paths are implemented without paid dependencies. The default Compose stack now provisions Ollama with a local chat model and semantic embedding model. Tika/OCRmyPDF/Tesseract, Docling, Whisper/faster-whisper, Kokoro, Asterisk/SIP, and Keycloak/OIDC federation remain separate operator-owned integrations because they require host binaries, model storage, hardware, telephony accounts, or identity policy. The deterministic adapter remains the safe fallback when those runtimes are absent; it never claims semantic model quality or performs side effects.
 
 ## Verification run
 
 - Local Django suite: 24 tests passed.
+- AI gateway unit suite: 7 tests passed.
 - Containerized Django suite against PostgreSQL/pgvector: 24 tests passed.
 - Ruff lint/format: passed.
 - Mypy: passed.
@@ -47,7 +48,8 @@ The software paths are implemented without paid dependencies. A charity may add 
 - Docker Compose build: passed.
 - Docker Compose startup: passed; reverse-proxy health and AI gateway health confirmed.
 - Production Compose topology: passed; Gunicorn health, collected static assets, Caddy routing, and worker ordering validated with synthetic configuration.
-- AI gateway boundary: passed; configured internal calls use the bounded sidecar with authenticated optional token and deterministic fallback.
+- AI gateway boundary: passed; configured internal calls use the authenticated Ollama-backed bounded sidecar with model readiness reporting and deterministic fallback.
+- Live local AI smoke: passed; `qwen3:4b` generated structured classification, drafting, translation, plain-language, and evidence answers; `all-minilm` generated 384-dimensional semantic embeddings.
 - Upload safety: passed; document size and MIME limits are enforced before persistence.
 - Legal hold safety: passed; direct deletes are blocked for held record types and retention execution is audited.
 - Admin boundary: passed; retention policies and AI model registry are not readable by viewer-role members.

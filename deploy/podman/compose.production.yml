@@ -21,6 +21,32 @@ services:
       - hope-prod-valkey:/data
     restart: unless-stopped
 
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - hope-prod-ollama:/root/.ollama
+    expose:
+      - "11434"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  ollama-models:
+    image: ollama/ollama:latest
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      AI_OLLAMA_CHAT_MODEL: ${AI_OLLAMA_CHAT_MODEL:-qwen3:4b}
+      AI_OLLAMA_EMBED_MODEL: ${AI_OLLAMA_EMBED_MODEL:-all-minilm}
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["ollama pull $${AI_OLLAMA_CHAT_MODEL} && ollama pull $${AI_OLLAMA_EMBED_MODEL}"]
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: "no"
+
   ai-gateway:
     build:
       context: ../..
@@ -28,6 +54,11 @@ services:
     environment:
       AI_GATEWAY_ENV: production
       AI_GATEWAY_TOKEN: ${AI_GATEWAY_TOKEN:?Set AI_GATEWAY_TOKEN}
+      AI_PROVIDER: ${AI_PROVIDER:-ollama}
+      AI_OLLAMA_URL: http://ollama:11434
+      AI_OLLAMA_CHAT_MODEL: ${AI_OLLAMA_CHAT_MODEL:-qwen3:4b}
+      AI_OLLAMA_EMBED_MODEL: ${AI_OLLAMA_EMBED_MODEL:-all-minilm}
+      AI_OLLAMA_TIMEOUT_SECONDS: ${AI_OLLAMA_TIMEOUT_SECONDS:-45}
     expose:
       - "9000"
     restart: unless-stopped
@@ -36,6 +67,9 @@ services:
       interval: 10s
       timeout: 3s
       retries: 12
+    depends_on:
+      ollama:
+        condition: service_healthy
 
   core:
     build:
@@ -59,6 +93,7 @@ services:
       AI_GATEWAY_URL: http://ai-gateway:9000
       AI_GATEWAY_TOKEN: ${AI_GATEWAY_TOKEN:?Set AI_GATEWAY_TOKEN}
       AI_GATEWAY_TIMEOUT_SECONDS: ${AI_GATEWAY_TIMEOUT_SECONDS:-3}
+      AI_PROVIDER: ${AI_PROVIDER:-ollama}
       PROJECT_HOPE_MAX_DOCUMENT_BYTES: ${PROJECT_HOPE_MAX_DOCUMENT_BYTES:-26214400}
       PROJECT_HOPE_MAX_UNCOMPRESSED_DOCUMENT_BYTES: ${PROJECT_HOPE_MAX_UNCOMPRESSED_DOCUMENT_BYTES:-104857600}
       PROJECT_HOPE_MAX_DOCUMENT_ARCHIVE_MEMBERS: ${PROJECT_HOPE_MAX_DOCUMENT_ARCHIVE_MEMBERS:-1000}
@@ -74,6 +109,8 @@ services:
         condition: service_started
       ai-gateway:
         condition: service_healthy
+      ollama-models:
+        condition: service_completed_successfully
     expose:
       - "8000"
     healthcheck:
@@ -146,3 +183,4 @@ volumes:
   hope-prod-static:
   hope-prod-caddy-data:
   hope-prod-caddy-config:
+  hope-prod-ollama:

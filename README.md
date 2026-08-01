@@ -58,6 +58,7 @@ The platform remains useful with AI disabled. AI features use bounded, replaceab
 - Accessible keyboard-first interfaces with reduced-motion support
 - Safe upload handling, data minimization, and fail-closed production configuration
 - No paid AI API or cloud service is a required dependency
+- The one-command local stack prepares a private Ollama chat model and semantic embedding model automatically; no AI account or API key is required.
 
 ## For setup partners
 
@@ -156,7 +157,7 @@ GitHub Actions also verifies the backend, web client, mobile client, desktop pac
 
 ## Release status
 
-The current public release is [Project Hope 1.3.2](https://github.com/Fink692/project-hope/releases/tag/v1.3.2), with native desktop installers attached. The [full build status](docs/full-build-status.md) records the implemented product surface and the remaining organization-owned launch requirements.
+The current public release is [Project Hope 1.4.0](https://github.com/Fink692/project-hope/releases/tag/v1.4.0), with native desktop installers and the local AI runtime configuration attached. The [full build status](docs/full-build-status.md) records the implemented product surface and the remaining organization-owned launch requirements.
 
 ## Principles
 

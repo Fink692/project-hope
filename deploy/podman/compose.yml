@@ -17,6 +17,31 @@ services:
     image: valkey/valkey:8-alpine
     command: ["valkey-server", "--save", "", "--appendonly", "no"]
 
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - hope-ollama:/root/.ollama
+    expose:
+      - "11434"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  ollama-models:
+    image: ollama/ollama:latest
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      AI_OLLAMA_CHAT_MODEL: ${AI_OLLAMA_CHAT_MODEL:-qwen3:4b}
+      AI_OLLAMA_EMBED_MODEL: ${AI_OLLAMA_EMBED_MODEL:-all-minilm}
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["ollama pull $${AI_OLLAMA_CHAT_MODEL} && ollama pull $${AI_OLLAMA_EMBED_MODEL}"]
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: "no"
+
   ai-gateway:
     build:
       context: ../..
@@ -26,11 +51,19 @@ services:
     environment:
       AI_GATEWAY_ENV: ${AI_GATEWAY_ENV:-development}
       AI_GATEWAY_TOKEN: ${AI_GATEWAY_TOKEN:-}
+      AI_PROVIDER: ${AI_PROVIDER:-ollama}
+      AI_OLLAMA_URL: http://ollama:11434
+      AI_OLLAMA_CHAT_MODEL: ${AI_OLLAMA_CHAT_MODEL:-qwen3:4b}
+      AI_OLLAMA_EMBED_MODEL: ${AI_OLLAMA_EMBED_MODEL:-all-minilm}
+      AI_OLLAMA_TIMEOUT_SECONDS: ${AI_OLLAMA_TIMEOUT_SECONDS:-45}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9000/healthz', timeout=2).read()"]
       interval: 10s
       timeout: 3s
       retries: 10
+    depends_on:
+      ollama:
+        condition: service_healthy
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.2
@@ -68,6 +101,7 @@ services:
       AI_GATEWAY_URL: http://ai-gateway:9000
       AI_GATEWAY_TOKEN: ${AI_GATEWAY_TOKEN:-}
       AI_GATEWAY_TIMEOUT_SECONDS: "3"
+      AI_PROVIDER: ${AI_PROVIDER:-ollama}
       PROJECT_HOPE_MAX_DOCUMENT_BYTES: "26214400"
       PROJECT_HOPE_MAX_UNCOMPRESSED_DOCUMENT_BYTES: "104857600"
       PROJECT_HOPE_MAX_DOCUMENT_ARCHIVE_MEMBERS: "1000"
@@ -83,6 +117,8 @@ services:
         condition: service_started
       ai-gateway:
         condition: service_started
+      ollama-models:
+        condition: service_completed_successfully
     expose:
       - "8000"
     healthcheck:
@@ -145,3 +181,4 @@ services:
 volumes:
   hope-db:
   hope-media:
+  hope-ollama:

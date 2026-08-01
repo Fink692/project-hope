@@ -40,6 +40,8 @@ bash scripts/project-hope.sh setup
 
 The helper starts the services, waits for the health check, and opens the workspace at [http://localhost:8090](http://localhost:8090).
 
+The first setup also prepares the local AI runtime automatically. It downloads the configured chat and embedding models into the private Project Hope model volume. This can take several minutes and needs several gigabytes of free disk space, but it does not require an AI account, API key, or cloud subscription. The workspace remains usable while the models are being prepared; the status card will say when AI is ready.
+
 ### 3. Sign in
 
 The local training workspace opens with a safe demo organization:
@@ -71,6 +73,12 @@ Use the same `scripts\project-hope.ps1` command on Windows or `scripts/project-h
 - **Staff member:** sign in, choose the organization, and start with CRM, Volunteers, or Scheduling. Every record stays inside the organization boundary.
 - **Administrator:** use the production deployment guide before real data, public access, or staff-wide rollout.
 - **Support helper:** ask the coordinator to run `status` first. If needed, `logs` shows recent service information without changing data.
+
+## What “AI ready” means
+
+Project Hope uses a local Ollama runtime for bounded classification, drafting, translation, plain-language rewrites, evidence-grounded grant answers, and semantic embeddings. Every generated result remains reviewable, and sending, publishing, eligibility decisions, permissions, and crisis responses stay with a human.
+
+If the model computer is unavailable or too small, Project Hope falls back to its deterministic safety adapter. That fallback is safe and testable, but it is not a general-purpose language model. The status command and gateway health endpoint make this distinction visible.
 
 ## If something goes wrong
 

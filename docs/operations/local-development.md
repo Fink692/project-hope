@@ -69,6 +69,29 @@ Run deploy/systemd/restore-drill.sh or restore-drill.ps1 only against explicitly
 
 For a hardened host deployment, use [production deployment](production-deployment.md) with `deploy/podman/compose.production.yml`. It replaces Django’s development server with Gunicorn and uses Caddy-managed HTTPS.
 
+## Local AI runtime
+
+The Compose stack includes Ollama and a one-time model preparation service. By default it downloads:
+
+- `qwen3:4b` for bounded text generation;
+- `all-minilm` for semantic embeddings.
+
+Change `AI_OLLAMA_CHAT_MODEL` or `AI_OLLAMA_EMBED_MODEL` in the environment before the first setup if the host has a different model budget. The gateway reports chat-model and embedding-model readiness separately at `/healthz` and `/v1/status`. If Ollama or either model is unavailable, the core API uses deterministic, human-reviewable fallbacks rather than failing open.
+
+The gateway can also be run directly for development:
+
+```powershell
+cd services\ai-gateway
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+$env:AI_PROVIDER = "ollama"
+$env:AI_OLLAMA_URL = "http://127.0.0.1:11434"
+uvicorn main:app --host 127.0.0.1 --port 9000
+```
+
+When running Django outside Compose, also set `$env:AI_GATEWAY_URL = "http://127.0.0.1:9000"` before starting the core service.
+
 ## Common checks
 
 ```powershell

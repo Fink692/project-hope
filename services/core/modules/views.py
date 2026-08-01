@@ -1091,7 +1091,7 @@ class AIOperationView(TenantView):
                 for key, value in payload.items()
                 if key not in {"password", "token"}
             },
-            prompt_version="deterministic-local-v1",
+            prompt_version="bounded-ai-v2",
             model_identifier="deterministic-local-adapter-v1",
             runtime="python",
         )
@@ -1099,12 +1099,16 @@ class AIOperationView(TenantView):
         risk_flags = []
         sources = []
         gateway_used = False
+        gateway_model = "deterministic-local-adapter-v1"
+        gateway_provider = "python"
         try:
             if operation == "classify-intent":
                 text = str(payload.get("text", ""))[:12000]
                 gateway = call_ai_gateway("v1/classify-intent", {"text": text})
                 if gateway and isinstance(gateway.get("intent"), str):
                     gateway_used = True
+                    gateway_model = str(gateway.get("model", gateway_model))
+                    gateway_provider = str(gateway.get("provider", "ai-gateway"))
                     intent = gateway["intent"]
                     flags = gateway.get("riskFlags", [])
                     output = {
@@ -1142,6 +1146,8 @@ class AIOperationView(TenantView):
                 )
                 if gateway and isinstance(gateway.get("body"), str):
                     gateway_used = True
+                    gateway_model = str(gateway.get("model", gateway_model))
+                    gateway_provider = str(gateway.get("provider", "ai-gateway"))
                     draft_body = gateway["body"][:12000]
                     draft_subject = str(gateway.get("subject", subject))[:500]
                     gateway_flags = gateway.get("riskFlags", [])
@@ -1173,14 +1179,43 @@ class AIOperationView(TenantView):
                     organization=organization, document_id__in=document_ids
                 )[:20]
                 sources = [str(passage.id) for passage in passages]
-                output = {
-                    "answer": "No approved evidence was found for this question. Add or review source documents before drafting.",
-                    "question": question,
-                    "citations": sources,
-                    "unsupportedClaims": [
-                        "answer requires approved organizational evidence"
-                    ],
-                }
+                gateway = call_ai_gateway(
+                    "v1/answer-grant",
+                    {
+                        "question": question,
+                        "passages": [
+                            {"id": str(passage.id), "text": passage.text}
+                            for passage in passages
+                        ],
+                    },
+                )
+                if gateway and isinstance(gateway.get("answer"), str):
+                    gateway_used = True
+                    gateway_model = str(gateway.get("model", gateway_model))
+                    gateway_provider = str(gateway.get("provider", "ai-gateway"))
+                    output = {
+                        "answer": gateway["answer"],
+                        "question": question,
+                        "citations": [
+                            citation
+                            for citation in gateway.get("citations", [])
+                            if citation in sources
+                        ],
+                        "unsupportedClaims": [
+                            claim
+                            for claim in gateway.get("unsupportedClaims", [])
+                            if isinstance(claim, str)
+                        ],
+                    }
+                else:
+                    output = {
+                        "answer": "No approved evidence was found for this question. Add or review source documents before drafting.",
+                        "question": question,
+                        "citations": sources,
+                        "unsupportedClaims": [
+                            "answer requires approved organizational evidence"
+                        ],
+                    }
                 risk_flags = ["unsupported_claims", "human_approval_required"]
             elif operation == "translate-segments":
                 source = str(payload.get("sourceLanguage", "en"))[:16]
@@ -1191,7 +1226,24 @@ class AIOperationView(TenantView):
                     if isinstance(payload.get("glossary", {}), dict)
                     else {}
                 )
-                translated = translate_local(text, source, target, glossary)
+                gateway = call_ai_gateway(
+                    "v1/translate",
+                    {
+                        "source_language": source,
+                        "target_language": target,
+                        "text": text,
+                        "glossary": glossary,
+                    },
+                )
+                if gateway and isinstance(gateway.get("translatedText"), str):
+                    gateway_used = True
+                    gateway_model = str(gateway.get("model", gateway_model))
+                    gateway_provider = str(gateway.get("provider", "ai-gateway"))
+                    translated = gateway["translatedText"]
+                    model_version = gateway_model
+                else:
+                    translated = translate_local(text, source, target, glossary)
+                    model_version = "deterministic-glossary-v1"
                 job = TranslationJob.objects.create(
                     organization=organization,
                     source_language=source,
@@ -1199,7 +1251,7 @@ class AIOperationView(TenantView):
                     source_text=text,
                     translated_text=translated,
                     glossary=glossary,
-                    model_version="deterministic-glossary-v1",
+                    model_version=model_version,
                     status=TranslationJob.Status.REVIEW,
                 )
                 output = {
@@ -1213,6 +1265,8 @@ class AIOperationView(TenantView):
                 gateway = call_ai_gateway("v1/embed", {"text": text})
                 if gateway and isinstance(gateway.get("embedding"), list):
                     gateway_used = True
+                    gateway_model = str(gateway.get("model", gateway_model))
+                    gateway_provider = str(gateway.get("provider", "ai-gateway"))
                     output = {
                         "embedding": gateway["embedding"],
                         "semantic": bool(gateway.get("semantic", False)),
@@ -1299,20 +1353,29 @@ class AIOperationView(TenantView):
                     transform_type
                     == AccessibilityTransform.TransformType.PLAIN_LANGUAGE
                 ):
-                    replacements = {
-                        "utilize": "use",
-                        "commence": "start",
-                        "approximately": "about",
-                        "demonstrate": "show",
-                        "individuals": "people",
-                    }
-                    for complex_word, plain_word in replacements.items():
-                        transformed = re.sub(
-                            rf"\b{complex_word}\b",
-                            plain_word,
-                            transformed,
-                            flags=re.IGNORECASE,
-                        )
+                    gateway = call_ai_gateway(
+                        "v1/plain-language", {"text": original}
+                    )
+                    if gateway and isinstance(gateway.get("transformedText"), str):
+                        gateway_used = True
+                        gateway_model = str(gateway.get("model", gateway_model))
+                        gateway_provider = str(gateway.get("provider", "ai-gateway"))
+                        transformed = gateway["transformedText"]
+                    else:
+                        replacements = {
+                            "utilize": "use",
+                            "commence": "start",
+                            "approximately": "about",
+                            "demonstrate": "show",
+                            "individuals": "people",
+                        }
+                        for complex_word, plain_word in replacements.items():
+                            transformed = re.sub(
+                                rf"\b{complex_word}\b",
+                                plain_word,
+                                transformed,
+                                flags=re.IGNORECASE,
+                            )
                 transform = AccessibilityTransform.objects.create(
                     organization=organization,
                     source_type=source_type,
@@ -1347,8 +1410,8 @@ class AIOperationView(TenantView):
                 else Workflow.State.COMPLETED
             )
             if gateway_used:
-                workflow.runtime = "ai-gateway"
-                workflow.model_identifier = "deterministic-gateway-adapter-v1"
+                workflow.runtime = gateway_provider
+                workflow.model_identifier = gateway_model
             workflow.structured_output = output
             workflow.sources = sources
             workflow.validation_results = {
