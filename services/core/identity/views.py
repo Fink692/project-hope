@@ -91,7 +91,9 @@ def invitation_from_token(token, *, for_update=False):
         "organization", "invited_by"
     )
     if for_update:
-        invitations = invitations.select_for_update()
+        # invited_by is nullable, so PostgreSQL rejects a broad FOR UPDATE across
+        # the outer join. Lock only the invitation row that guards one-time use.
+        invitations = invitations.select_for_update(of=("self",))
     try:
         invitation = invitations.get(id=payload["id"])
     except (OrganizationInvitation.DoesNotExist, DjangoValidationError) as exc:
@@ -857,7 +859,7 @@ class OrganizationInvitationResendView(APIView):
         with transaction.atomic():
             try:
                 invitation = (
-                    OrganizationInvitation.objects.select_for_update()
+                    OrganizationInvitation.objects.select_for_update(of=("self",))
                     .select_related("invited_by", "organization")
                     .get(organization=organization, id=invitation_id)
                 )
