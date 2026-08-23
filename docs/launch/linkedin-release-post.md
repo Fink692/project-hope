@@ -4,7 +4,7 @@
 
 After a long stretch of building, testing, rebuilding, and caring about the details users should never have to think about, I’m incredibly proud to release Project Hope 1.7. 🌱
 
-This is a major trust release for the product I set out to make: install the app, sign in, and get to work.
+This is a major trust release for a simple experience: provision a managed workspace, install the app, sign in, and get to work.
 
 Charities do essential work, but too many are still asked to stitch that work together with disconnected spreadsheets, inboxes, documents, and tools that assume an IT team is standing by.
 
@@ -23,7 +23,7 @@ The part I’m proudest of is not a single feature. It is the care underneath th
 
 This release passed 57 backend tests, 13 web journeys with automated accessibility checks, 7 AI-gateway tests, production builds across every client, dependency audits, migration checks, and fail-closed production configuration checks.
 
-I’m now opening the Founding 10: ten charities willing to test Project Hope honestly and help shape what comes next. The managed Founding Partner pilot is CAD $149/month after the workspace is live. There is no application fee, no card collected to apply, and no payment obligation until scope and responsibilities are agreed in writing.
+I’m now opening the Founding 10: ten charities willing to test Project Hope honestly and help shape what comes next. The planned managed Founding Partner pilot is CAD $149/month after the workspace is live. There is no application fee, no card collected to apply, and no payment obligation until scope and responsibilities are agreed in writing.
 
 If you work with a charity—or know someone who does—I would be grateful if you shared this.
 
@@ -32,7 +32,7 @@ To ask about a Founding 10 place, send me a private LinkedIn message with “FOU
 Release notes and desktop installers:
 https://github.com/Fink692/project-hope/releases/tag/v1.7.0
 
-After working on this for a long time, it feels deeply meaningful to put this release into the world. It is ready for its first real charity partners—and I’m proud of the care, honesty, and persistence that went into getting it here.
+After working on this for a long time, it feels deeply meaningful to put this release into the world. The release is ready for its next stage: working directly with its first real charity partners. I’m proud of the care, honesty, and persistence that went into getting it here.
 
 #CharityTech #NonprofitTechnology #SocialImpact #ResponsibleAI #SaaS #TechForGood
 
