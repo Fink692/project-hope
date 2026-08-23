@@ -71,6 +71,16 @@ Use the same `scripts\project-hope.ps1` command on Windows or `scripts/project-h
 
 - **Coordinator:** run `setup`, open the browser, and share the local address with the team on the same computer/network only after access is configured.
 - **Staff member:** sign in, choose the organization, and start with CRM, Volunteers, or Scheduling. Every record stays inside the organization boundary.
+
+### Invite your team
+
+An owner or administrator opens **Team & access**, enters a teammate's work email, chooses a role, and selects **Send invitation**. The teammate receives a private link that expires after seven days by default. A new teammate chooses a password in the link; someone who already has a Project Hope account accepts and signs in normally. Owners and administrators can resend or revoke pending links and change active member roles from the same screen.
+
+If mail delivery is temporarily unavailable, Project Hope shows that delivery is retrying and the background worker tries again. Never copy invitation links into public chats or documents.
+
+If someone forgets a password, select **Forgot password?** on the sign-in screen. Project Hope gives the same immediate privacy-safe response for every address and, when an active account matches, the background worker emails a one-hour single-use reset link. Changing the password signs out existing sessions and revokes the account's API token.
+
+Native mobile/API sign-ins expire after 30 days by default. If the app asks someone to sign in again, this is expected token rotation; no organization data is deleted.
 - **Administrator:** use the production deployment guide before real data, public access, or staff-wide rollout.
 - **Support helper:** ask the coordinator to run `status` first. If needed, `logs` shows recent service information without changing data.
 

@@ -18,6 +18,35 @@ type Session = {
   organizations: Array<{ organization: Organization; role: string }>;
 };
 
+type TeamMember = {
+  id: string;
+  user: { id: string; email: string; display_name: string };
+  role: string;
+  active: boolean;
+};
+
+type TeamInvitation = {
+  id: string;
+  email: string;
+  role: string;
+  status: string;
+  effective_status: string;
+  delivery_status: string;
+  expires_at: string;
+  email_sent_at: string | null;
+};
+
+type InvitationPreview = {
+  organization: { name: string };
+  email: string;
+  role: string;
+  roleLabel: string;
+  expiresAt: string;
+  existingAccount: boolean;
+};
+
+type PasswordResetCredential = { uid: string; token: string };
+
 type ModuleDefinition = {
   id: string;
   label: string;
@@ -58,6 +87,7 @@ type PilotFormValues = {
 };
 
 const modules: ModuleDefinition[] = [
+  { id: "team", label: "Team & access", description: "Invite staff, assign roles, and review access", endpoint: "members", color: "blue" },
   { id: "crm", label: "CRM", description: "People, households, consent, and relationships", endpoint: "contacts", color: "sage" },
   { id: "volunteers", label: "Volunteers", description: "Applications, skills, availability, and onboarding", endpoint: "volunteer-applications", color: "blue" },
   { id: "scheduling", label: "Scheduling", description: "Appointments, shifts, resources, and reminders", endpoint: "schedules", color: "sand" },
@@ -72,7 +102,7 @@ const modules: ModuleDefinition[] = [
   { id: "donors", label: "Donor insights", description: "Descriptive cohorts and transparent reason codes", endpoint: "donor-snapshots", color: "coral" },
   { id: "plugins", label: "Plugin catalogue", description: "Administrator-controlled, capability-scoped packages", endpoint: "plugins", color: "sage" },
   { id: "api", label: "Public API", description: "Tenant-bound clients and explicit scopes", endpoint: "api-clients", color: "blue" },
-  { id: "pwa", label: "PWA / offline", description: "Installable, low-bandwidth workspace shell", endpoint: "me", color: "sand" },
+  { id: "pwa", label: "Installable web app", description: "A connected workspace that installs from the browser", endpoint: "me", color: "sand" },
   { id: "ai", label: "AI workflows", description: "Bounded operations with review and provenance", endpoint: "workflows", color: "coral" },
 ];
 
@@ -152,10 +182,14 @@ function App() {
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
   const [activeModule, setActiveModule] = useState("overview");
   const [selectedOrganization, setSelectedOrganization] = useState("");
-  const [loginEmail, setLoginEmail] = useState("demo@example.org");
+  const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [loginBusy, setLoginBusy] = useState(false);
+  const [invitationToken, setInvitationToken] = useState("");
+  const [passwordReset, setPasswordReset] = useState<PasswordResetCredential | null>(null);
+  const [requestPasswordReset, setRequestPasswordReset] = useState(false);
+  const [workspaceNotice, setWorkspaceNotice] = useState("");
   const [pilotVerification, setPilotVerification] = useState<"idle" | "checking" | "confirmed" | "error">("idle");
   const [pilotVerificationMessage, setPilotVerificationMessage] = useState("");
 
@@ -164,6 +198,9 @@ function App() {
       ?? session?.organizations[0]?.organization,
     [selectedOrganization, session],
   );
+  const currentRole = session?.organizations.find(
+    ({ organization }) => organization.slug === currentOrganization?.slug,
+  )?.role ?? "";
 
   useEffect(() => {
     function rememberInstallPrompt(event: Event) {
@@ -177,7 +214,36 @@ function App() {
   useEffect(() => {
     const url = new URL(window.location.href);
     const fragmentParams = new URLSearchParams(url.hash.replace(/^#/, ""));
-    const token = fragmentParams.get("pilot_token") ?? url.searchParams.get("pilot_token");
+    const privateCredentialKeys = ["reset_uid", "reset_token", "invite_token", "pilot_token"];
+    let removedQueryCredential = false;
+    for (const key of privateCredentialKeys) {
+      removedQueryCredential = url.searchParams.has(key) || removedQueryCredential;
+      url.searchParams.delete(key);
+    }
+    if (removedQueryCredential) {
+      window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+
+    const resetUid = fragmentParams.get("reset_uid");
+    const resetToken = fragmentParams.get("reset_token");
+    if (resetUid && resetToken) {
+      url.searchParams.delete("reset_uid");
+      url.searchParams.delete("reset_token");
+      url.hash = "";
+      window.history.replaceState({}, "", `${url.pathname}${url.search}`);
+      setPasswordReset({ uid: resetUid, token: resetToken });
+      return;
+    }
+    const teamToken = fragmentParams.get("invite_token");
+    if (teamToken) {
+      url.searchParams.delete("invite_token");
+      url.hash = "";
+      window.history.replaceState({}, "", `${url.pathname}${url.search}`);
+      setInvitationToken(teamToken);
+      return;
+    }
+
+    const token = fragmentParams.get("pilot_token");
     if (!token) return;
 
     url.searchParams.delete("pilot_token");
@@ -240,6 +306,38 @@ function App() {
     try { await request("/api/v1/auth/logout/", { method: "POST", body: "{}" }); } finally { setSession(null); }
   }
 
+  async function invitationAccepted(result: {
+    detail: string;
+    signedIn: boolean;
+    organization: Organization;
+    user: { email: string };
+  }) {
+    setWorkspaceNotice(result.detail);
+    setInvitationToken("");
+    if (result.signedIn) {
+      try {
+        const nextSession = await request("/api/v1/me/") as Session;
+        setSession(nextSession);
+        setSelectedOrganization(result.organization.slug);
+        setActiveModule("team");
+        window.history.replaceState({}, "", `${window.location.pathname}${window.location.search}#workspace`);
+        return;
+      } catch {
+        // A pre-existing account may still need its normal sign-in session.
+      }
+    }
+    setLoginEmail(result.user.email);
+    window.history.replaceState({}, "", `${window.location.pathname}${window.location.search}#sign-in`);
+  }
+
+  function passwordResetCompleted(email: string, detail: string) {
+    setLoginEmail(email);
+    setPasswordReset(null);
+    setRequestPasswordReset(false);
+    setWorkspaceNotice(detail);
+    window.history.replaceState({}, "", `${window.location.pathname}${window.location.search}#sign-in`);
+  }
+
   async function installApp() {
     if (!installPrompt) return;
     await installPrompt.prompt();
@@ -267,6 +365,10 @@ function App() {
       </header>
 
       <main id="main-content">
+        {invitationToken && <InvitationAcceptance token={invitationToken} onAccepted={(result) => void invitationAccepted(result)} onCancel={() => setInvitationToken("")} />}
+        {!invitationToken && (requestPasswordReset || passwordReset) && <PasswordResetPanel credentials={passwordReset} initialEmail={loginEmail} onCancel={() => { setPasswordReset(null); setRequestPasswordReset(false); }} onCompleted={passwordResetCompleted} />}
+        {!invitationToken && !requestPasswordReset && !passwordReset && <>
+        {workspaceNotice && <div className="verification-banner" role="status" aria-live="polite"><strong>Access updated</strong><span>{workspaceNotice}</span><button className="text-button" type="button" onClick={() => setWorkspaceNotice("")}>Dismiss</button></div>}
         {pilotVerification !== "idle" && <div className={`verification-banner ${pilotVerification === "error" ? "error" : ""}`} role={pilotVerification === "error" ? "alert" : "status"} aria-live="polite"><strong>{pilotVerification === "checking" ? "Confirming your email…" : pilotVerification === "confirmed" ? "Email confirmed" : "Confirmation problem"}</strong>{pilotVerificationMessage && <span>{pilotVerificationMessage}</span>}</div>}
         <section className="hero" id="overview" aria-labelledby="hero-title">
           <div>
@@ -281,8 +383,8 @@ function App() {
             </div>
           </div>
           <aside className="health-card" aria-labelledby="health-title">
-            <div className="health-heading"><span className={`status-dot ${health.status}`} aria-hidden="true" /><h3 id="health-title">Local system status</h3></div>
-            <p className="health-status" role="status">{health.status === "ok" ? "Ready for local work" : health.status === "unknown" ? "Checking services…" : "Needs attention"}</p>
+            <div className="health-heading"><span className={`status-dot ${health.status}`} aria-hidden="true" /><h3 id="health-title">Workspace status</h3></div>
+            <p className="health-status" role="status">{health.status === "ok" ? "Ready for work" : health.status === "unknown" ? "Checking services…" : "Needs attention"}</p>
             <dl className="health-details"><div><dt>Core service</dt><dd>{health.status}</dd></div><div><dt>Database</dt><dd>{health.database}</dd></div><div><dt>AI runtime</dt><dd>{health.ai?.status ?? "unknown"}{health.ai?.runtime && health.ai.runtime !== "ollama" ? ` · ${health.ai.runtime}` : ""}</dd></div></dl>
           </aside>
         </section>
@@ -296,6 +398,7 @@ function App() {
               <label>Email<input type="email" value={loginEmail} onChange={(event) => setLoginEmail(event.target.value)} autoComplete="username" required /></label>
               <label>Password<input type="password" value={loginPassword} onChange={(event) => setLoginPassword(event.target.value)} autoComplete="current-password" required /></label>
               <button aria-busy={loginBusy} className="button primary" disabled={loginBusy} type="submit">{loginBusy ? "Signing in…" : "Sign in"}</button>
+              <button className="text-button sign-in-reset" type="button" onClick={() => setRequestPasswordReset(true)}>Forgot password?</button>
               {loginError && <p className="form-error" role="alert">{loginError}</p>}
             </form>
             <aside className="onboarding-card" aria-labelledby="onboarding-title">
@@ -319,7 +422,7 @@ function App() {
                 <button aria-current={activeModule === "overview" ? "page" : undefined} className={activeModule === "overview" ? "selected" : ""} type="button" onClick={() => setActiveModule("overview")}>Workspace overview</button>
                 {modules.map((module) => <button aria-current={activeModule === module.id ? "page" : undefined} className={activeModule === module.id ? "selected" : ""} type="button" key={module.id} onClick={() => setActiveModule(module.id)}>{module.label}</button>)}
               </nav>
-              <div className="module-content">{activeModule === "overview" ? <WorkspaceOverview onOpen={(id) => setActiveModule(id)} /> : selectedModule ? <ModulePanel module={selectedModule} organization={currentOrganization} /> : null}</div>
+              <div className="module-content">{activeModule === "overview" ? <WorkspaceOverview onOpen={(id) => setActiveModule(id)} /> : activeModule === "team" ? <TeamPanel organization={currentOrganization} role={currentRole} /> : selectedModule ? <ModulePanel module={selectedModule} organization={currentOrganization} /> : null}</div>
             </div>
           </section>
         )}
@@ -327,10 +430,378 @@ function App() {
         {!session && <section className="section" id="foundation" aria-labelledby="foundation-title"><div className="section-heading"><div><p className="eyebrow">Built for trust</p><h2 id="foundation-title">The foundation is useful on its own.</h2></div><p>AI can be switched off without taking the core platform with it.</p></div><FoundationCards /></section>}
 
         <section className="section roadmap-section" id="roadmap" aria-labelledby="roadmap-title"><div className="section-heading"><div><p className="eyebrow">Guardrails across the product</p><h2 id="roadmap-title">Small steps, clear proof.</h2></div><p>Every module earns its place by passing safety, accessibility, and operational checks.</p></div><ol className="roadmap-list"><li className="complete"><span>01</span><div><strong>Foundation</strong><p>Identity, tenancy, authorization, audit, and health.</p></div><b>Complete</b></li><li><span>02</span><div><strong>Core operations</strong><p>CRM, volunteers, scheduling, documents, and reporting.</p></div><b>Ready</b></li><li><span>03</span><div><strong>Bounded assistance</strong><p>Email, grants, translation, resources, and reviewable AI.</p></div><b>Human review</b></li><li><span>04</span><div><strong>Expansion</strong><p>PWA, voice, donor cohorts, plugins, and native clients.</p></div><b>Controlled</b></li></ol></section>
+        </>}
       </main>
       <footer className="site-footer"><p>Project Hope · free self-hosted core · managed support available</p><p>Human authority over model authority.</p></footer>
     </div>
   );
+}
+
+function PasswordResetPanel({
+  credentials,
+  initialEmail,
+  onCancel,
+  onCompleted,
+}: {
+  credentials: PasswordResetCredential | null;
+  initialEmail: string;
+  onCancel: () => void;
+  onCompleted: (email: string, detail: string) => void;
+}) {
+  const [email, setEmail] = useState(initialEmail);
+  const [accountEmail, setAccountEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
+  const [loading, setLoading] = useState(Boolean(credentials));
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!credentials) return;
+    setLoading(true);
+    setError("");
+    request("/api/v1/auth/password-reset/inspect/", {
+      method: "POST",
+      body: JSON.stringify(credentials),
+    })
+      .then((body: { email: string }) => setAccountEmail(body.email))
+      .catch((reason) => setError(reason instanceof Error ? reason.message : "Unable to open this reset link."))
+      .finally(() => setLoading(false));
+  }, [credentials]);
+
+  async function requestReset(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const result = await request("/api/v1/auth/password-reset/", {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      });
+      setMessage(result.detail);
+      setSent(true);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to request a password reset.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmReset(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    if (!credentials) return;
+    if (password !== passwordConfirm) {
+      setError("The passwords do not match.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await request("/api/v1/auth/password-reset/confirm/", {
+        method: "POST",
+        body: JSON.stringify({ ...credentials, password, password_confirm: passwordConfirm }),
+      });
+      onCompleted(result.email, result.detail);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to change this password.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="invitation-acceptance password-reset-panel" aria-labelledby="password-reset-title">
+      <div className="invitation-visual" aria-hidden="true"><span>H</span><p>A secure way back to your community workspace.</p></div>
+      <div className="invitation-card">
+        <p className="eyebrow">Account recovery</p>
+        {credentials ? loading ? <h2 id="password-reset-title">Checking your reset link…</h2> : accountEmail ? (
+          <>
+            <h2 id="password-reset-title">Choose a new password.</h2>
+            <p className="invitation-lede">Resetting <strong>{accountEmail}</strong> will sign out existing sessions and revoke its API sign-in token.</p>
+            <form className="invitation-form" onSubmit={confirmReset}>
+              <div className="form-grid">
+                <label>New password<input autoComplete="new-password" minLength={8} required type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
+                <label>Confirm new password<input autoComplete="new-password" minLength={8} required type="password" value={passwordConfirm} onChange={(event) => setPasswordConfirm(event.target.value)} /></label>
+              </div>
+              <p className="form-hint">Use a long, unique passphrase that you do not use for another service.</p>
+              {error && <p className="form-error" role="alert">{error}</p>}
+              <div className="form-actions"><button aria-busy={busy} className="button primary" disabled={busy} type="submit">{busy ? "Changing password…" : "Change password"}</button><button className="button secondary" disabled={busy} type="button" onClick={onCancel}>Cancel</button></div>
+            </form>
+          </>
+        ) : (
+          <><h2 id="password-reset-title">This reset link cannot be used.</h2><p className="invitation-lede">{error || "It may have expired or already been used."}</p><div className="form-actions"><button className="button primary" type="button" onClick={onCancel}>Back to sign in</button></div></>
+        ) : sent ? (
+          <><h2 id="password-reset-title">Check your inbox.</h2><p className="invitation-lede">{message}</p><p className="form-hint">For privacy, the response is the same whether or not that address has an active account. The link expires after one hour by default.</p><div className="form-actions"><button className="button secondary" type="button" onClick={onCancel}>Back to sign in</button></div></>
+        ) : (
+          <>
+            <h2 id="password-reset-title">Reset your password.</h2>
+            <p className="invitation-lede">Enter your account email. If it matches an active account, Project Hope will send a private one-hour link.</p>
+            <form className="invitation-form" onSubmit={requestReset}>
+              <label className="standalone-field">Account email<input autoComplete="email" required type="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label>
+              {error && <p className="form-error" role="alert">{error}</p>}
+              <div className="form-actions"><button aria-busy={busy} className="button primary" disabled={busy} type="submit">{busy ? "Sending…" : "Send reset link"}</button><button className="button secondary" disabled={busy} type="button" onClick={onCancel}>Cancel</button></div>
+            </form>
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function InvitationAcceptance({
+  token,
+  onAccepted,
+  onCancel,
+}: {
+  token: string;
+  onAccepted: (result: {
+    detail: string;
+    signedIn: boolean;
+    organization: Organization;
+    user: { email: string };
+  }) => void;
+  onCancel: () => void;
+}) {
+  const [preview, setPreview] = useState<InvitationPreview | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [password, setPassword] = useState("");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
+
+  useEffect(() => {
+    setLoading(true);
+    setError("");
+    request("/api/v1/invitations/inspect/", {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    })
+      .then((body: InvitationPreview) => setPreview(body))
+      .catch((reason) => setError(reason instanceof Error ? reason.message : "Unable to open this invitation."))
+      .finally(() => setLoading(false));
+  }, [token]);
+
+  async function accept(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    if (!preview?.existingAccount && password !== passwordConfirm) {
+      setError("The passwords do not match.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await request("/api/v1/invitations/accept/", {
+        method: "POST",
+        body: JSON.stringify({
+          token,
+          first_name: firstName,
+          last_name: lastName,
+          password,
+          password_confirm: passwordConfirm,
+        }),
+      });
+      onAccepted(result);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to accept this invitation.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="invitation-acceptance" aria-labelledby="invitation-title">
+      <div className="invitation-visual" aria-hidden="true"><span>H</span><p>A private invitation to do good work together.</p></div>
+      <div className="invitation-card">
+        <p className="eyebrow">Secure team invitation</p>
+        {loading ? <h2 id="invitation-title">Checking your invitation…</h2> : preview ? (
+          <>
+            <h2 id="invitation-title">Join {preview.organization.name}.</h2>
+            <p className="invitation-lede"><strong>{preview.email}</strong> was invited as <strong>{preview.roleLabel.toLowerCase()}</strong>. This link expires {formatDate(preview.expiresAt)} and works once.</p>
+            <form className="invitation-form" onSubmit={accept}>
+              {preview.existingAccount ? (
+                <div className="invitation-existing"><strong>Your account is ready.</strong><p>Accept now, then sign in with your existing Project Hope password. Your password will not be changed.</p></div>
+              ) : (
+                <>
+                  <div className="form-grid">
+                    <label>First name<input autoComplete="given-name" value={firstName} onChange={(event) => setFirstName(event.target.value)} /></label>
+                    <label>Last name<input autoComplete="family-name" value={lastName} onChange={(event) => setLastName(event.target.value)} /></label>
+                    <label>Password<input autoComplete="new-password" minLength={8} required type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
+                    <label>Confirm password<input autoComplete="new-password" minLength={8} required type="password" value={passwordConfirm} onChange={(event) => setPasswordConfirm(event.target.value)} /></label>
+                  </div>
+                  <p className="form-hint">Use a long, unique passphrase. Project Hope checks it against the server’s password policy before creating the account.</p>
+                </>
+              )}
+              {error && <p className="form-error" role="alert">{error}</p>}
+              <div className="form-actions">
+                <button aria-busy={busy} className="button primary" disabled={busy} type="submit">{busy ? "Joining…" : preview.existingAccount ? "Accept invitation" : "Create account and join"}</button>
+                <button className="button secondary" disabled={busy} type="button" onClick={onCancel}>Not now</button>
+              </div>
+            </form>
+          </>
+        ) : (
+          <>
+            <h2 id="invitation-title">This invitation cannot be used.</h2>
+            <p className="invitation-lede">{error || "It may have expired, been revoked, or already been accepted."}</p>
+            <button className="button secondary" type="button" onClick={onCancel}>Continue to Project Hope</button>
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
+const teamRoles = [
+  { value: "owner", label: "Owner" },
+  { value: "admin", label: "Administrator" },
+  { value: "coordinator", label: "Coordinator" },
+  { value: "staff", label: "Staff" },
+  { value: "viewer", label: "Viewer" },
+];
+
+function TeamPanel({ organization, role }: { organization: Organization; role: string }) {
+  const canManage = role === "owner" || role === "admin";
+  const [members, setMembers] = useState<TeamMember[]>([]);
+  const [invitations, setInvitations] = useState<TeamInvitation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("staff");
+  const [busy, setBusy] = useState("");
+
+  async function loadTeam() {
+    setLoading(true);
+    setError("");
+    try {
+      const memberData = await request(`/api/v1/organizations/${organization.slug}/members/`) as TeamMember[];
+      setMembers(memberData);
+      if (canManage) {
+        const invitationData = await request(`/api/v1/organizations/${organization.slug}/invitations/`) as TeamInvitation[];
+        setInvitations(invitationData);
+      } else {
+        setInvitations([]);
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to load team access.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { void loadTeam(); }, [organization.slug, canManage]);
+
+  async function invite(event: FormEvent) {
+    event.preventDefault();
+    setBusy("invite");
+    setError("");
+    setNotice("");
+    try {
+      const invitation = await request(`/api/v1/organizations/${organization.slug}/invitations/`, {
+        method: "POST",
+        body: JSON.stringify({ email: inviteEmail, role: inviteRole }),
+      }) as TeamInvitation;
+      setInviteEmail("");
+      setNotice(invitation.delivery_status === "sent" ? `Invitation sent to ${invitation.email}.` : `Invitation saved for ${invitation.email}; email delivery will retry automatically.`);
+      await loadTeam();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to send this invitation.");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function updateMember(member: TeamMember, changes: { role?: string; active?: boolean }) {
+    setBusy(member.id);
+    setError("");
+    setNotice("");
+    try {
+      await request(`/api/v1/organizations/${organization.slug}/members/${member.id}/`, {
+        method: "PATCH",
+        body: JSON.stringify(changes),
+      });
+      setNotice(`Access updated for ${member.user.display_name}.`);
+      await loadTeam();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to update team access.");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function resend(invitation: TeamInvitation) {
+    setBusy(invitation.id);
+    setError("");
+    setNotice("");
+    try {
+      const updated = await request(`/api/v1/organizations/${organization.slug}/invitations/${invitation.id}/resend/`, { method: "POST", body: "{}" }) as TeamInvitation;
+      setNotice(updated.delivery_status === "sent" ? `A fresh invitation was sent to ${updated.email}.` : `A fresh invitation was saved for ${updated.email}; delivery will retry automatically.`);
+      await loadTeam();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to resend this invitation.");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function revoke(invitation: TeamInvitation) {
+    if (!window.confirm(`Revoke the invitation for ${invitation.email}?`)) return;
+    setBusy(invitation.id);
+    setError("");
+    setNotice("");
+    try {
+      await request(`/api/v1/organizations/${organization.slug}/invitations/${invitation.id}/`, { method: "DELETE" });
+      setNotice(`Invitation revoked for ${invitation.email}.`);
+      await loadTeam();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to revoke this invitation.");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  return (
+    <div>
+      <div className="module-heading">
+        <div><p className="eyebrow">People and permissions</p><h3 className="module-title">Team & access</h3><p className="module-lede">Invite people by email, give each person only the access they need, and revoke pending links at any time.</p></div>
+        <span className="module-count">{members.filter((member) => member.active).length} active</span>
+      </div>
+      {canManage && (
+        <form className="team-invite-form" onSubmit={invite}>
+          <div><p className="eyebrow">Invite a teammate</p><h4>Send one secure, expiring link.</h4></div>
+          <label>Work email<input autoComplete="email" required type="email" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="name@charity.org" /></label>
+          <label>Role<select value={inviteRole} onChange={(event) => setInviteRole(event.target.value)}>{teamRoles.filter((option) => role === "owner" || option.value !== "owner").map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+          <button aria-busy={busy === "invite"} className="button primary compact" disabled={busy === "invite"} type="submit">{busy === "invite" ? "Sending…" : "Send invitation"}</button>
+        </form>
+      )}
+      {notice && <p className="team-notice" role="status">{notice}</p>}
+      {error && <div className="empty-state error-state" role="alert"><strong>Team access needs attention.</strong><p>{error}</p><button className="button secondary compact" type="button" onClick={() => void loadTeam()}>Try again</button></div>}
+      {loading ? <p className="loading-state" role="status">Loading team access…</p> : (
+        <>
+          <section className="team-section" aria-labelledby="members-title">
+            <div className="team-section-heading"><div><p className="eyebrow">Current access</p><h4 id="members-title">Team members</h4></div><span>{members.length} total</span></div>
+            <div className="team-list">{members.map((member) => {
+              const ownerProtectedFromAdmin = role !== "owner" && member.role === "owner";
+              return <article className={!member.active ? "inactive" : ""} key={member.id}><div className="avatar" aria-hidden="true">{member.user.display_name.slice(0, 1).toUpperCase()}</div><div className="team-person"><strong>{member.user.display_name}</strong><small>{member.user.email}</small></div>{canManage ? <><label className="role-control"><span className="sr-only">Role for {member.user.display_name}</span><select aria-label={`Role for ${member.user.display_name}`} disabled={busy === member.id || ownerProtectedFromAdmin} value={member.role} onChange={(event) => void updateMember(member, { role: event.target.value })}>{teamRoles.filter((option) => role === "owner" || option.value !== "owner" || member.role === "owner").map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><button className="text-button danger" disabled={busy === member.id || ownerProtectedFromAdmin} type="button" onClick={() => { const action = member.active ? "Deactivate" : "Reactivate"; if (window.confirm(`${action} access for ${member.user.display_name}?`)) void updateMember(member, { active: !member.active }); }}>{member.active ? "Deactivate" : "Reactivate"}</button></> : <span className="role-badge">{roleLabel(member.role)}</span>}</article>;
+            })}</div>
+          </section>
+          {canManage && <section className="team-section" aria-labelledby="invitations-title"><div className="team-section-heading"><div><p className="eyebrow">Invitation history</p><h4 id="invitations-title">Invitations</h4></div><span>{invitations.filter((invitation) => invitation.status === "pending").length} pending</span></div>{invitations.length === 0 ? <div className="empty-state"><strong>No invitations yet.</strong><p>Send the first secure link above when your teammate is ready.</p></div> : <div className="invitation-list">{invitations.map((invitation) => <article key={invitation.id}><div><strong>{invitation.email}</strong><small>{roleLabel(invitation.role)} · {invitation.delivery_status === "sent" ? "Email sent" : "Delivery retrying"} · {invitation.effective_status === "expired" ? "Expired" : roleLabel(invitation.effective_status)}</small></div>{invitation.status === "pending" && (role === "owner" || invitation.role !== "owner") && <div className="inline-actions"><button className="text-button" disabled={busy === invitation.id} type="button" onClick={() => void resend(invitation)}>Resend</button><button className="text-button danger" disabled={busy === invitation.id} type="button" onClick={() => void revoke(invitation)}>Revoke</button></div>}</article>)}</div>}</section>}
+        </>
+      )}
+    </div>
+  );
+}
+
+function roleLabel(value: string) {
+  return teamRoles.find((role) => role.value === value)?.label ?? value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function formatDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "soon" : date.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
 }
 
 function initialPilotForm(): PilotFormValues {
@@ -450,30 +921,7 @@ function FoundationCards() {
 }
 
 function WorkspaceOverview({ onOpen }: { onOpen: (id: string) => void }) {
-  return <div><p className="eyebrow">Your operating surface</p><h3 className="module-title">Choose a module to begin.</h3><p className="module-lede">Everything here stays inside the organization boundary. Start with structured records; add AI only when a reviewable workflow helps.</p><div className="module-grid">{modules.map((module) => <button type="button" className={`module-card ${module.color}`} key={module.id} onClick={() => onOpen(module.id)}><span>{module.label}</span><small>{module.description}</small><b aria-hidden="true">↗</b></button>)}</div><OfflineDraftPad /></div>;
-}
-
-function OfflineDraftPad() {
-  const [draft, setDraft] = useState(() => {
-    try {
-      return localStorage.getItem("project-hope-offline-draft") ?? "";
-    } catch {
-      return "";
-    }
-  });
-  const [saved, setSaved] = useState(false);
-  const [storageError, setStorageError] = useState(false);
-  function save() {
-    try {
-      localStorage.setItem("project-hope-offline-draft", draft.slice(0, 4000));
-      setSaved(true);
-      setStorageError(false);
-    } catch {
-      setSaved(false);
-      setStorageError(true);
-    }
-  }
-  return <aside className="offline-pad" aria-labelledby="offline-pad-title"><div><p className="eyebrow">Offline-safe scratchpad</p><h4 id="offline-pad-title">Capture a bounded note.</h4><p>Stored only in this browser until you choose where to move it.</p></div><textarea maxLength={4000} value={draft} onChange={(event) => { setDraft(event.target.value); setSaved(false); setStorageError(false); }} placeholder="A reminder for your next connected session…" aria-label="Offline draft note" /><div className="offline-pad-footer"><button className="button secondary" type="button" onClick={save}>Save on this device</button><span role="status">{saved ? "Saved locally" : storageError ? "Browser storage unavailable" : "Not saved"}</span></div></aside>;
+  return <div><p className="eyebrow">Your operating surface</p><h3 className="module-title">Choose a module to begin.</h3><p className="module-lede">Everything here stays inside the organization boundary. Start with structured records; add AI only when a reviewable workflow helps.</p><div className="module-grid">{modules.map((module) => <button type="button" className={`module-card ${module.color}`} key={module.id} onClick={() => onOpen(module.id)}><span>{module.label}</span><small>{module.description}</small><b aria-hidden="true">↗</b></button>)}</div></div>;
 }
 
 function ModulePanel({ module, organization }: { module: ModuleDefinition; organization: Organization }) {

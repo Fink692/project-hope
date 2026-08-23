@@ -41,27 +41,23 @@ const modules: Module[] = [
 ];
 
 const AUTH_KEY = "project-hope-mobile-token";
-const NOTE_KEY = "project-hope-mobile-note";
-const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const LEGACY_NOTE_KEY = "project-hope-mobile-note";
+type ConnectionState = "checking" | "online" | "unavailable";
 
 function normalizeBaseUrl(value: string) {
   return value.replace(/\/+$/, "");
 }
 
-async function readCachedRecords(key: string): Promise<unknown[] | null> {
-  const stored = await SecureStore.getItemAsync(key);
-  if (!stored) return null;
-  try {
-    const snapshot = JSON.parse(stored) as { savedAt?: number; records?: unknown[] };
-    const age = Date.now() - Number(snapshot.savedAt ?? 0);
-    if (Array.isArray(snapshot.records) && age >= 0 && age <= CACHE_MAX_AGE_MS) {
-      return snapshot.records;
-    }
-  } catch {
-    // Corrupt or legacy snapshots are discarded below.
-  }
-  await SecureStore.deleteItemAsync(key);
-  return null;
+async function purgeLegacyOfflineData(session: Session) {
+  const recordKeys = session.organizations.flatMap(({ organization }) =>
+    modules.map(
+      (module) =>
+        "project-hope-cache-" + organization.slug + "-" + module.endpoint,
+    ),
+  );
+  await Promise.allSettled(
+    [LEGACY_NOTE_KEY, ...recordKeys].map((key) => SecureStore.deleteItemAsync(key)),
+  );
 }
 
 async function apiRequest<T>(
@@ -98,7 +94,7 @@ function LoginScreen({ baseUrl, onAuthenticated }: { baseUrl: string; onAuthenti
     setBusy(true);
     setError("");
     try {
-      const result = await apiRequest<{ token: string }>(baseUrl, "/auth/login/", undefined, {
+      const result = await apiRequest<{ token: string }>(baseUrl, "/auth/token/", undefined, {
         method: "POST",
         body: JSON.stringify({ email: email.trim(), password }),
       });
@@ -155,8 +151,8 @@ function LoginScreen({ baseUrl, onAuthenticated }: { baseUrl: string; onAuthenti
   );
 }
 
-function StatusPill({ online }: { online: "checking" | "online" | "offline" }) {
-  const label = online === "checking" ? "Checking connection…" : online === "online" ? "Connected" : "Offline · cached work only";
+function StatusPill({ online }: { online: ConnectionState }) {
+  const label = online === "checking" ? "Checking connection…" : online === "online" ? "Connected" : "Connection unavailable";
   return (
     <View accessibilityLiveRegion="polite" accessible accessibilityRole="text" style={styles.statusPill}>
       <View style={[styles.statusDot, online === "online" ? styles.good : styles.warn]} />
@@ -187,7 +183,7 @@ function Workspace({
   baseUrl: string;
   token: string;
   session: Session;
-  online: "checking" | "online" | "offline";
+  online: ConnectionState;
   onSignOut: () => Promise<void>;
 }) {
   const [organizationSlug, setOrganizationSlug] = useState(session.organizations[0]?.organization.slug ?? "");
@@ -196,18 +192,6 @@ function Workspace({
     () => session.organizations.find(({ organization: item }) => item.slug === organizationSlug)?.organization ?? session.organizations[0]?.organization,
     [organizationSlug, session.organizations],
   );
-  const [note, setNote] = useState("");
-  const [noteSaved, setNoteSaved] = useState(false);
-
-  useEffect(() => {
-    SecureStore.getItemAsync(NOTE_KEY).then((value) => setNote(value ?? ""));
-  }, []);
-
-  async function saveNote() {
-    await SecureStore.setItemAsync(NOTE_KEY, note.slice(0, 4000));
-    setNoteSaved(true);
-  }
-
   if (!organization) return <Text style={styles.error}>No active organization is available.</Text>;
 
   return (
@@ -241,17 +225,6 @@ function Workspace({
             data={modules}
             keyExtractor={(item) => item.id}
             ListHeaderComponent={<View><Text style={styles.welcome}>Hello, {session.user.display_name.split(" ")[0]}.</Text><Text style={styles.body}>Choose the work surface you need. Sensitive data stays on the charity server.</Text></View>}
-            ListFooterComponent={
-              <View style={styles.noteCard}>
-                <Text style={styles.cardTitle}>Offline note</Text>
-                <Text style={styles.caption}>A bounded reminder stored only on this device.</Text>
-                <TextInput accessibilityLabel="Offline note" multiline onChangeText={(value) => { setNote(value); setNoteSaved(false); }} placeholder="Capture a reminder for your next connected session…" placeholderTextColor="#87928b" style={styles.noteInput} value={note} />
-                <View style={styles.noteFooter}>
-                  <Pressable accessibilityRole="button" onPress={() => void saveNote()} style={styles.secondaryButton}><Text style={styles.secondaryButtonText}>Save on device</Text></Pressable>
-                  <Text accessibilityLiveRegion="polite" style={styles.caption}>{noteSaved ? "Saved" : "Not saved"}</Text>
-                </View>
-              </View>
-            }
             renderItem={({ item }) => (
               <Pressable accessibilityRole="button" onPress={() => setSelected(item)} style={[styles.moduleCard, { backgroundColor: item.accent }]}>
                 <View style={styles.cardText}><Text style={styles.cardTitle}>{item.label}</Text><Text style={styles.body}>{item.description}</Text></View>
@@ -270,7 +243,6 @@ function ModuleScreen({ baseUrl, module, organization, token, onBack }: { baseUr
   const [busy, setBusy] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
-  const [cached, setCached] = useState(false);
 
   const load = useCallback(async (isRefresh = false) => {
     setError("");
@@ -279,21 +251,12 @@ function ModuleScreen({ baseUrl, module, organization, token, onBack }: { baseUr
       const result = await apiRequest<unknown>(baseUrl, "/organizations/" + organization.slug + "/" + module.endpoint + "/", token);
       const next = Array.isArray(result) ? result : [];
       setRecords(next);
-      setCached(false);
-      const encoded = JSON.stringify({ savedAt: Date.now(), records: next.slice(0, 20) });
-      if (encoded.length < 1900) await SecureStore.setItemAsync("project-hope-cache-" + organization.slug + "-" + module.endpoint, encoded);
     } catch (reason) {
       const status = (reason as Error & { status?: number }).status;
       if (status === 401) {
         setError("Your session has expired. Sign out and sign in again.");
       } else {
-        const cachedRecords = await readCachedRecords("project-hope-cache-" + organization.slug + "-" + module.endpoint);
-        if (cachedRecords) {
-          setRecords(cachedRecords);
-          setCached(true);
-        } else {
-          setError(reason instanceof Error ? reason.message : "Unable to load this workspace.");
-        }
+        setError(reason instanceof Error ? reason.message : "Unable to load this workspace.");
       }
     } finally {
       setBusy(false);
@@ -309,7 +272,6 @@ function ModuleScreen({ baseUrl, module, organization, token, onBack }: { baseUr
       <Text style={styles.eyebrow}>FIELD WORKSPACE</Text>
       <Text style={styles.moduleTitle}>{module.label}</Text>
       <Text style={styles.body}>{module.description}</Text>
-      {cached ? <Text accessibilityLiveRegion="polite" style={styles.cachedNotice}>Showing the last safe local snapshot.</Text> : null}
       {error ? <View style={styles.errorCard}><Text accessibilityRole="alert" style={styles.error}>{error}</Text><Pressable accessibilityRole="button" onPress={() => void load(true)} style={styles.secondaryButton}><Text style={styles.secondaryButtonText}>Try again</Text></Pressable></View> : null}
       {busy ? <View style={styles.loading}><ActivityIndicator color="#1f5148" /><Text style={styles.caption}>Loading records…</Text></View> : records.length === 0 ? <View style={styles.emptyCard}><Text style={styles.cardTitle}>Nothing here yet</Text><Text style={styles.body}>New organization-controlled records will appear here when connected.</Text></View> : (
         <FlatList
@@ -339,7 +301,7 @@ function recordSummary(item: unknown) {
 export default function App() {
   const [token, setToken] = useState<string | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [online, setOnline] = useState<"checking" | "online" | "offline">("checking");
+  const [online, setOnline] = useState<ConnectionState>("checking");
   const [booting, setBooting] = useState(true);
   const baseUrl = normalizeBaseUrl(
     process.env.EXPO_PUBLIC_API_URL ??
@@ -349,15 +311,16 @@ export default function App() {
   const refreshHealth = useCallback(async () => {
     try {
       const health = await apiRequest<{ status: string }>(baseUrl, "/healthz/");
-      setOnline(health.status === "ok" ? "online" : "offline");
+      setOnline(health.status === "ok" ? "online" : "unavailable");
     } catch {
-      setOnline("offline");
+      setOnline("unavailable");
     }
   }, [baseUrl]);
 
   const loadSession = useCallback(async (candidate: string) => {
     try {
       const next = await apiRequest<Session>(baseUrl, "/me/", candidate);
+      await purgeLegacyOfflineData(next);
       setToken(candidate);
       setSession(next);
     } catch {
@@ -441,14 +404,10 @@ const styles = StyleSheet.create({
   cardText: { flex: 1, paddingRight: 14 },
   cardTitle: { color: "#1d2b2a", fontSize: 17, fontWeight: "800", marginBottom: 5 },
   arrow: { color: "#1f5148", fontSize: 30, fontWeight: "300" },
-  noteCard: { backgroundColor: "#fbfaf7", borderColor: "#d9d7cf", borderRadius: 16, borderWidth: 1, marginTop: 10, padding: 18 },
-  noteInput: { backgroundColor: "#fff", borderColor: "#d9d7cf", borderRadius: 10, borderWidth: 1, color: "#1d2b2a", fontSize: 15, minHeight: 92, marginTop: 12, padding: 12, textAlignVertical: "top" },
-  noteFooter: { alignItems: "center", flexDirection: "row", justifyContent: "space-between" },
   moduleScreen: { flex: 1, paddingTop: 12 },
   backButton: { alignSelf: "flex-start", paddingVertical: 10 },
   backText: { color: "#1f5148", fontSize: 15, fontWeight: "800" },
   moduleTitle: { color: "#1d2b2a", fontSize: 32, fontWeight: "700", letterSpacing: -0.8, marginBottom: 8 },
-  cachedNotice: { backgroundColor: "#fff4df", borderRadius: 8, color: "#7a5b16", fontSize: 13, marginTop: 14, padding: 10 },
   loading: { alignItems: "center", flex: 1, gap: 12, justifyContent: "center", padding: 24 },
   errorCard: { backgroundColor: "#fff5f2", borderRadius: 14, marginTop: 18, padding: 16 },
   emptyCard: { backgroundColor: "#fbfaf7", borderColor: "#d9d7cf", borderRadius: 14, borderWidth: 1, marginTop: 18, padding: 18 },

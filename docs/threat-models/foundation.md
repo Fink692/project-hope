@@ -1,22 +1,26 @@
 # Foundation threat model
 
-Scope: Phase 1 identity, organization APIs, memberships, audit events, local deployment, and future AI boundary. This is a design baseline, not a penetration-test report.
+Scope: v1.6 identity, organization APIs, memberships, invitations, account recovery, native tokens, audit events, deployment, background mail delivery, and AI boundary. This is a design baseline, not a penetration-test report.
 
-| Threat | Impact | Mitigation in Phase 1 | Residual risk / follow-up |
+| Threat | Impact | Mitigation in v1.6 | Residual risk / follow-up |
 |---|---|---|---|
 | Cross-tenant object access | Confidentiality breach | Membership-scoped query helpers, 404 for non-members, cross-tenant tests | Every future module must add the same matrix tests |
-| Role escalation | Unauthorized administration | Central role policy, owner/admin checks, no client-controlled role grants | Add programme/field-level policy before CRM case data |
-| Session theft/CSRF | Account takeover or unwanted writes | Django password hashing, session auth, CSRF middleware, secure-cookie production settings | MFA/short privileged sessions via Keycloak integration |
+| Role escalation | Unauthorized administration | Central role policy, owner/admin checks, owner-only owner grants, protected owner UI, and serialized last-owner checks | Add programme/field-level policy and independent authorization testing before sensitive case-data use |
+| Session theft/CSRF | Account takeover or unwanted writes | Django password hashing, explicit CSRF-protected browser login, session auth, secure-cookie production settings, and no token in browser-login responses | MFA, OIDC, privileged-session policy, and independent session review remain open |
+| Credential stuffing | Account takeover or service exhaustion | Case-normalized identities, shared-cache per-account and higher IP login ceilings, plus an explicit trusted-proxy count so caller-supplied forwarding headers cannot bypass the IP ceiling | Distributed attacks and stolen valid credentials still require monitored identity federation/MFA |
+| Invitation disclosure or replay | Unauthorized organization access | Signed timestamped fragment credential, matching database expiry, token-version rotation, single use, revoke/resend controls, public throttling, and no plaintext token storage | A compromised recipient mailbox can still expose an unused link; production SMTP and mailbox policy require validation |
+| Password-reset enumeration or replay | Account discovery or takeover | Generic asynchronous response, credential-free mail queue, fragment credentials, Django single-use token invalidation, expiry, password policy, public throttling, and API-token revocation | Response-timing and distributed-enumeration testing plus production-mailbox controls remain external gates |
+| Native token theft | Persistent API access | Secure mobile storage, fixed token lifetime, logout revocation, password-reset revocation, and authenticated audit events | Per-device tokens, token inventory, remote session revocation, and device attestation are not implemented |
+| Concurrent access/mail changes | Lost owner access or duplicate security email | Organization membership updates lock rows in a stable order; invitation/reset mail jobs use atomic retry claims | Multi-region queue behavior and database-failover races require production load/failure testing |
 | Audit tampering | Loss of accountability | Append-only model behavior, restricted audit endpoint, no update/delete API | Hash chaining/immutable storage may be added for high-assurance deployments |
-| Secret leakage in logs | Credential or personal-data exposure | Minimal audit metadata and explicit logging policy | Review every module’s log statements; add redaction tests |
+| Secret leakage in logs | Credential or personal-data exposure | Invitation/reset credentials use URL fragments, bootstrap output omits tokens, queues store no reset credential, and audit metadata is minimized | Review proxy/mail/provider logs and add deployment-specific redaction tests |
 | Malicious seed/default credentials | Local compromise | Development-only command, environment-controlled password, documentation warning | Production installer must require rotation and disable demo seed |
 | Database exposure | Full tenant compromise | Local bind defaults, deployment docs, separate DB credentials | TLS/private networking and encrypted disks required in production |
-| Malicious email/document prompt injection | Future unauthorized AI action | AI is absent in Phase 1; future gateway treats content as untrusted and uses schemas/approval | Must maintain adversarial corpus before AI promotion |
-| Compromised plugin | Host/data compromise | No plugin runtime in Phase 1; future capability-only sandbox | Signed manifests, sandbox, network policy, kill switch before catalogue |
-| DoS/resource exhaustion | Availability loss | Health endpoint and bounded future API design | Add rate limits, upload limits, queue quotas, monitoring |
-| Privacy request incompleteness | Retained personal data | Data model and deletion requirements documented | Implement cross-store retention/deletion before production handling |
+| Malicious email/document prompt injection | Unauthorized AI-assisted action | Mail/document content is untrusted, gateway operations are schema-bounded, deterministic fallbacks fail closed, and consequential outputs require human review | Maintain adversarial corpora and complete task-specific external evaluations before production AI claims |
+| Compromised plugin | Host/data compromise | Catalogue records and capability tokens exist, but no production marketplace/runtime claim is made | Signed artefacts, SBOM verification, isolated sandbox, network policy, and kill switch remain required |
+| DoS/resource exhaustion | Availability loss | Health checks, public/authenticated throttles, bounded upload/archive settings, and worker batches | Add production quotas, saturation alerts, load tests, and abuse response procedures |
+| Privacy request incompleteness | Retained personal data | Retention/legal-hold models, tenant export, delivery-metadata purge, and connected-only clients with legacy mobile-cache cleanup | Approve organization schedules and test deletion/export across every configured external provider |
 
 ## Security defaults
 
-Production must use a strong secret, HTTPS through Caddy, secure cookies, trusted hosts, MFA for staff/admins, encrypted disks/backups, restrictive database access, secret rotation, an incident contact tree, and explicit backup/restore testing. Development defaults are convenient, not safe for real sensitive records.
-
+Production must use a strong secret, HTTPS through Caddy, secure cookies, trusted hosts, externally integrated MFA for staff/admins, encrypted disks/backups, restrictive database access, secret rotation, an incident contact tree, and explicit backup/restore testing. The repository currently fails closed on a missing/non-PostgreSQL production database URL, but it does not supply MFA/OIDC integration or prove those organization-owned controls. Development defaults are convenient, not safe for real sensitive records.

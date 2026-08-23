@@ -47,6 +47,7 @@ jobs:
           DJANGO_ALLOWED_HOSTS: example.org
           DJANGO_TRUST_PROXY: "true"
           DJANGO_CSRF_TRUSTED_ORIGINS: https://example.org
+          DATABASE_URL: postgresql://hope:ci-only@localhost:5432/hope
           SMTP_HOST: smtp.example.org
           SMTP_FROM: Project Hope <noreply@example.org>
           PROJECT_HOPE_PUBLIC_URL: https://example.org

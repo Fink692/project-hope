@@ -3,16 +3,22 @@ import uuid
 from django.contrib.auth.base_user import BaseUserManager
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.db import models
+from django.db.models.functions import Lower
 
 
 class UserManager(BaseUserManager):
     def create_user(self, email, password=None, **extra_fields):
         if not email:
             raise ValueError("An email address is required.")
-        user = self.model(email=self.normalize_email(email), **extra_fields)
+        user = self.model(
+            email=self.normalize_email(email).strip().lower(), **extra_fields
+        )
         user.set_password(password)
         user.save(using=self._db)
         return user
+
+    def get_by_natural_key(self, username):
+        return self.get(email__iexact=str(username).strip())
 
     def create_superuser(self, email, password=None, **extra_fields):
         extra_fields.setdefault("is_staff", True)
@@ -39,8 +45,17 @@ class User(AbstractBaseUser, PermissionsMixin):
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS: list[str] = []
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(Lower("email"), name="unique_user_email_ci")
+        ]
+
     def __str__(self):
         return self.email
+
+    def save(self, *args, **kwargs):
+        self.email = self.email.strip().lower()
+        super().save(*args, **kwargs)
 
     @property
     def display_name(self):
@@ -99,6 +114,108 @@ class Membership(models.Model):
 
     def __str__(self):
         return f"{self.user.email} @ {self.organization.slug} ({self.role})"
+
+
+class OrganizationInvitation(models.Model):
+    """A revocable, single-use invitation to an organization workspace."""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        ACCEPTED = "accepted", "Accepted"
+        REVOKED = "revoked", "Revoked"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization, on_delete=models.CASCADE, related_name="invitations"
+    )
+    email = models.EmailField()
+    role = models.CharField(
+        max_length=24, choices=Membership.Role.choices, default=Membership.Role.STAFF
+    )
+    invited_by = models.ForeignKey(
+        "User",
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="organization_invitations_sent",
+    )
+    status = models.CharField(
+        max_length=16, choices=Status.choices, default=Status.PENDING
+    )
+    token_version = models.PositiveIntegerField(default=1)
+    expires_at = models.DateTimeField()
+    email_sent_at = models.DateTimeField(null=True, blank=True)
+    email_last_attempt_at = models.DateTimeField(null=True, blank=True)
+    email_attempts = models.PositiveIntegerField(default=0)
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "email"],
+                condition=models.Q(status="pending"),
+                name="unique_pending_organization_invitation",
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["organization", "status", "-created_at"],
+                name="identity_inv_org_status_idx",
+            ),
+            models.Index(
+                fields=["email", "status"], name="identity_inv_email_status_idx"
+            ),
+        ]
+        ordering = ["-created_at"]
+
+    def save(self, *args, **kwargs):
+        self.email = self.email.strip().lower()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.email} invited to {self.organization.slug} ({self.role})"
+
+
+class PasswordResetDelivery(models.Model):
+    """An ephemeral mail job that never stores a password-reset credential."""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        SENT = "sent", "Sent"
+        CANCELLED = "cancelled", "Cancelled"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        "User", on_delete=models.CASCADE, related_name="password_reset_deliveries"
+    )
+    status = models.CharField(
+        max_length=16, choices=Status.choices, default=Status.PENDING
+    )
+    password_fingerprint = models.CharField(max_length=64)
+    expires_at = models.DateTimeField()
+    email_sent_at = models.DateTimeField(null=True, blank=True)
+    email_last_attempt_at = models.DateTimeField(null=True, blank=True)
+    email_attempts = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user"],
+                condition=models.Q(status="pending"),
+                name="unique_pending_password_reset_delivery",
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["status", "expires_at"],
+                name="identity_reset_status_exp_idx",
+            )
+        ]
+        ordering = ["-created_at"]
 
 
 class PilotApplication(models.Model):

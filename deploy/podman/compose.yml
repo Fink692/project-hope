@@ -106,6 +106,7 @@ services:
       PROJECT_HOPE_MAX_DOCUMENT_BYTES: "26214400"
       PROJECT_HOPE_MAX_UNCOMPRESSED_DOCUMENT_BYTES: "104857600"
       PROJECT_HOPE_MAX_DOCUMENT_ARCHIVE_MEMBERS: "1000"
+      DRF_NUM_PROXIES: "1"
     volumes:
       - hope-media:/workspace/services/core/media
     command: ["sh", "-c", "python manage.py migrate --noinput && python manage.py seed_demo && python manage.py runserver 0.0.0.0:8000"]
@@ -141,6 +142,8 @@ services:
       SMTP_HOST: mailpit
       SMTP_PORT: "1025"
       SMTP_STARTTLS: "false"
+      SMTP_FROM: Project Hope <noreply@project-hope.local>
+      PROJECT_HOPE_PUBLIC_URL: http://localhost:8090
       PROJECT_HOPE_WORKER_INTERVAL: "60"
     volumes:
       - hope-media:/workspace/services/core/media

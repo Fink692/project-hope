@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Project Hope API
-  version: 1.5.0
+  version: 1.6.0
   description: Tenant-bound API for self-hosted charity operations.
 servers:
   - url: /api/v1
@@ -20,12 +20,80 @@ paths:
       summary: Current user and active organizations
       responses:
         '200': { description: Identity and memberships }
+  /auth/csrf/:
+    get:
+      security: []
+      summary: Set the browser CSRF cookie before session login
+      responses:
+        '200': { description: CSRF cookie is available }
   /auth/login/:
     post:
       security: []
-      summary: Sign in and receive a browser session plus native API token
+      summary: Create a CSRF-protected browser session
+      responses:
+        '200': { description: Authenticated browser user }
+        '400': { description: Invalid credentials }
+        '403': { description: CSRF check failed }
+        '429': { description: Per-account or IP login limit reached }
+  /auth/token/:
+    post:
+      security: []
+      summary: Exchange credentials for a native-client API token
       responses:
         '200': { description: Authenticated user and token }
+        '400': { description: Invalid credentials }
+        '429': { description: Per-account or IP login limit reached }
+  /auth/password-reset/:
+    post:
+      security: []
+      summary: Request a privacy-preserving password reset email
+      responses:
+        '202': { description: Generic response regardless of account existence }
+        '429': { description: Request limit reached }
+  /auth/password-reset/inspect/:
+    post:
+      security: []
+      summary: Validate password reset credentials without changing the account
+      responses:
+        '200': { description: Reset credentials are valid }
+        '400': { description: Reset credentials invalid or expired }
+  /auth/password-reset/confirm/:
+    post:
+      security: []
+      summary: Set a policy-validated password and revoke the API token
+      responses:
+        '200': { description: Password changed and existing sessions invalidated }
+        '400': { description: Invalid credentials or password policy failure }
+  /invitations/inspect/:
+    post:
+      security: []
+      summary: Inspect an expiring organization invitation
+      responses:
+        '200': { description: Invitation metadata }
+        '400': { description: Invitation invalid, expired, revoked, or used }
+  /invitations/accept/:
+    post:
+      security: []
+      summary: Accept an invitation and create an account when required
+      responses:
+        '200': { description: Membership active }
+        '400': { description: Invalid invitation or password }
+  /organizations/{slug}/members/:
+    parameters: [{ $ref: '#/components/parameters/OrganizationSlug' }]
+    get: { summary: List organization memberships, responses: { '200': { description: Memberships } } }
+  /organizations/{slug}/members/{membershipId}/:
+    parameters: [{ $ref: '#/components/parameters/OrganizationSlug' }, { $ref: '#/components/parameters/MembershipId' }]
+    patch: { summary: Change a member role or active status, responses: { '200': { description: Membership updated }, '400': { description: Invalid change or last-owner protection }, '403': { description: Owner or administrator permission required } } }
+  /organizations/{slug}/invitations/:
+    parameters: [{ $ref: '#/components/parameters/OrganizationSlug' }]
+    get: { summary: List invitations for an owner or administrator, responses: { '200': { description: Invitations } } }
+    post: { summary: Send or refresh an expiring invitation, responses: { '201': { description: Invitation created }, '200': { description: Pending invitation refreshed } } }
+  /organizations/{slug}/invitations/{invitationId}/:
+    parameters: [{ $ref: '#/components/parameters/OrganizationSlug' }, { $ref: '#/components/parameters/InvitationId' }]
+    delete: { summary: Revoke a pending invitation, responses: { '204': { description: Invitation revoked }, '400': { description: Invitation is not pending }, '403': { description: Owner or administrator permission required } } }
+  /organizations/{slug}/invitations/{invitationId}/resend/:
+    parameters: [{ $ref: '#/components/parameters/OrganizationSlug' }, { $ref: '#/components/parameters/InvitationId' }]
+    post: { summary: Rotate and resend a pending invitation, responses: { '200': { description: Invitation rotated and delivery attempted }, '400': { description: Invitation is not pending }, '403': { description: Owner or administrator permission required } } }
   /pilot-applications/:
     post:
       security: []
@@ -89,6 +157,8 @@ components:
   parameters:
     OrganizationSlug: { name: slug, in: path, required: true, schema: { type: string } }
     Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    MembershipId: { name: membershipId, in: path, required: true, schema: { type: string, format: uuid } }
+    InvitationId: { name: invitationId, in: path, required: true, schema: { type: string, format: uuid } }
   schemas:
     PilotApplicationRequest:
       type: object

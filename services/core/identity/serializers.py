@@ -1,6 +1,12 @@
 from rest_framework import serializers
 
-from .models import Membership, Organization, PilotApplication, User
+from .models import (
+    Membership,
+    Organization,
+    OrganizationInvitation,
+    PilotApplication,
+    User,
+)
 
 
 class UserSummarySerializer(serializers.ModelSerializer):
@@ -31,6 +37,37 @@ class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True, trim_whitespace=False)
 
+    def validate_email(self, value):
+        return value.strip().lower()
+
+
+class PasswordResetRequestSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    def validate_email(self, value):
+        return value.strip().lower()
+
+
+class PasswordResetTokenSerializer(serializers.Serializer):
+    uid = serializers.CharField(max_length=256, trim_whitespace=True)
+    token = serializers.CharField(max_length=256, trim_whitespace=True)
+
+
+class PasswordResetConfirmSerializer(PasswordResetTokenSerializer):
+    password = serializers.CharField(
+        max_length=256, trim_whitespace=False, write_only=True
+    )
+    password_confirm = serializers.CharField(
+        max_length=256, trim_whitespace=False, write_only=True
+    )
+
+    def validate(self, attrs):
+        if attrs["password"] != attrs["password_confirm"]:
+            raise serializers.ValidationError(
+                {"password_confirm": "The passwords do not match."}
+            )
+        return attrs
+
 
 class CreateOrganizationSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=200)
@@ -47,6 +84,95 @@ class AddMembershipSerializer(serializers.Serializer):
 class UpdateMembershipSerializer(serializers.Serializer):
     role = serializers.ChoiceField(choices=Membership.Role.choices, required=False)
     active = serializers.BooleanField(required=False)
+
+
+class OrganizationInvitationSerializer(serializers.ModelSerializer):
+    invited_by = UserSummarySerializer(read_only=True)
+    effective_status = serializers.SerializerMethodField()
+    delivery_status = serializers.SerializerMethodField()
+
+    class Meta:
+        model = OrganizationInvitation
+        fields = [
+            "id",
+            "email",
+            "role",
+            "status",
+            "effective_status",
+            "delivery_status",
+            "invited_by",
+            "expires_at",
+            "email_sent_at",
+            "email_attempts",
+            "accepted_at",
+            "revoked_at",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+    def get_effective_status(self, invitation):
+        from django.utils import timezone
+
+        if (
+            invitation.status == OrganizationInvitation.Status.PENDING
+            and invitation.expires_at <= timezone.now()
+        ):
+            return "expired"
+        return invitation.status
+
+    def get_delivery_status(self, invitation):
+        if invitation.email_sent_at is not None:
+            return "sent"
+        if invitation.email_attempts:
+            return "retrying"
+        return "pending"
+
+
+class CreateOrganizationInvitationSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    role = serializers.ChoiceField(
+        choices=Membership.Role.choices, default=Membership.Role.STAFF
+    )
+
+    def validate_email(self, value):
+        return value.strip().lower()
+
+
+class InvitationTokenSerializer(serializers.Serializer):
+    token = serializers.CharField(max_length=2048, trim_whitespace=True)
+
+
+class AcceptOrganizationInvitationSerializer(InvitationTokenSerializer):
+    first_name = serializers.CharField(
+        max_length=150, required=False, allow_blank=True, trim_whitespace=True
+    )
+    last_name = serializers.CharField(
+        max_length=150, required=False, allow_blank=True, trim_whitespace=True
+    )
+    password = serializers.CharField(
+        max_length=256,
+        required=False,
+        allow_blank=True,
+        trim_whitespace=False,
+        write_only=True,
+    )
+    password_confirm = serializers.CharField(
+        max_length=256,
+        required=False,
+        allow_blank=True,
+        trim_whitespace=False,
+        write_only=True,
+    )
+
+    def validate(self, attrs):
+        password = attrs.get("password", "")
+        confirmation = attrs.get("password_confirm", "")
+        if password != confirmation:
+            raise serializers.ValidationError(
+                {"password_confirm": "The passwords do not match."}
+            )
+        return attrs
 
 
 class PilotApplicationSerializer(serializers.ModelSerializer):

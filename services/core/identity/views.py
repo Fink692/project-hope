@@ -1,7 +1,9 @@
 from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.password_validation import validate_password
 from django.core import signing
-from django.db import transaction
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import IntegrityError, transaction
 from django.db.models import F
 from django.http import Http404
 from django.middleware.csrf import get_token
@@ -10,7 +12,7 @@ from django.utils.text import slugify
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.utils.decorators import method_decorator
 from rest_framework import status
-from rest_framework.authentication import BaseAuthentication
+from rest_framework.authentication import BaseAuthentication, SessionAuthentication
 from rest_framework.authtoken.models import Token
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
@@ -19,24 +21,47 @@ from rest_framework.views import APIView
 
 from audit.models import AuditEvent
 
-from .models import Membership, Organization, PilotApplication, User
+from .authentication import token_is_expired
+from .invitations import (
+    invitation_expiry,
+    invitation_payload,
+    prepare_team_invitation,
+    send_team_invitation,
+)
+from .models import (
+    Membership,
+    Organization,
+    OrganizationInvitation,
+    PasswordResetDelivery,
+    PilotApplication,
+    User,
+)
 from .pilot import (
     PILOT_VERIFICATION_SALT,
     send_pilot_verification,
     verification_email_due,
 )
+from .passwords import password_reset_user, queue_password_reset
 from .permissions import active_membership, require_admin, require_membership
 from .serializers import (
+    AcceptOrganizationInvitationSerializer,
     AddMembershipSerializer,
+    CreateOrganizationInvitationSerializer,
     CreateOrganizationSerializer,
+    InvitationTokenSerializer,
     LoginSerializer,
     MembershipSerializer,
+    OrganizationInvitationSerializer,
     OrganizationSerializer,
+    PasswordResetConfirmSerializer,
+    PasswordResetRequestSerializer,
+    PasswordResetTokenSerializer,
     PilotApplicationSerializer,
     PilotVerificationSerializer,
     UpdateMembershipSerializer,
     UserSummarySerializer,
 )
+from .throttles import LoginAccountRateThrottle
 
 
 def scoped_organization(request, slug):
@@ -54,6 +79,31 @@ def scoped_organization(request, slug):
 
 def current_membership(request, organization):
     return active_membership(request.user, organization)
+
+
+class InvalidInvitation(Exception):
+    pass
+
+
+def invitation_from_token(token, *, for_update=False):
+    payload = invitation_payload(token)
+    invitations = OrganizationInvitation.objects.select_related(
+        "organization", "invited_by"
+    )
+    if for_update:
+        invitations = invitations.select_for_update()
+    try:
+        invitation = invitations.get(id=payload["id"])
+    except (OrganizationInvitation.DoesNotExist, DjangoValidationError) as exc:
+        raise InvalidInvitation from exc
+    if (
+        invitation.status != OrganizationInvitation.Status.PENDING
+        or invitation.email != payload["email"]
+        or invitation.token_version != payload["version"]
+        or invitation.expires_at <= timezone.now()
+    ):
+        raise InvalidInvitation
+    return invitation
 
 
 @method_decorator(ensure_csrf_cookie, name="dispatch")
@@ -193,10 +243,297 @@ class PilotMetricsView(APIView):
         )
 
 
-class LoginView(APIView):
+class InvitationInspectView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "invitation_public"
 
     def post(self, request):
+        serializer = InvitationTokenSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            invitation = invitation_from_token(serializer.validated_data["token"])
+        except (InvalidInvitation, signing.BadSignature, TypeError, ValueError):
+            return Response(
+                {"detail": "This invitation is invalid, expired, or no longer active."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            {
+                "organization": {"name": invitation.organization.name},
+                "email": invitation.email,
+                "role": invitation.role,
+                "roleLabel": invitation.get_role_display(),
+                "expiresAt": invitation.expires_at,
+                "existingAccount": User.objects.filter(
+                    email__iexact=invitation.email, is_active=True
+                ).exists(),
+            }
+        )
+
+
+class InvitationAcceptView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "invitation_public"
+
+    def post(self, request):
+        serializer = AcceptOrganizationInvitationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        token = serializer.validated_data["token"]
+
+        try:
+            with transaction.atomic():
+                invitation = invitation_from_token(token, for_update=True)
+                if (
+                    request.user.is_authenticated
+                    and request.user.email.lower() != invitation.email
+                ):
+                    return Response(
+                        {
+                            "detail": (
+                                "Sign out before accepting an invitation for a "
+                                "different email address."
+                            )
+                        },
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+
+                user = User.objects.filter(email__iexact=invitation.email).first()
+                created_account = user is None
+                if user is not None and not user.is_active:
+                    return Response(
+                        {
+                            "detail": (
+                                "This account is inactive. Ask an administrator for help."
+                            )
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                if created_account:
+                    password = serializer.validated_data.get("password", "")
+                    if not password:
+                        return Response(
+                            {"password": ["Choose a password to create your account."]},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                    user = User(
+                        email=invitation.email,
+                        first_name=serializer.validated_data.get("first_name", ""),
+                        last_name=serializer.validated_data.get("last_name", ""),
+                    )
+                    try:
+                        validate_password(password, user=user)
+                    except DjangoValidationError as exc:
+                        return Response(
+                            {"password": exc.messages},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                    user.set_password(password)
+                    try:
+                        with transaction.atomic():
+                            user.save()
+                    except IntegrityError:
+                        user = User.objects.filter(
+                            email__iexact=invitation.email
+                        ).first()
+                        if user is None:
+                            raise
+                        created_account = False
+                        if not user.is_active:
+                            return Response(
+                                {
+                                    "detail": (
+                                        "This account is inactive. Ask an "
+                                        "administrator for help."
+                                    )
+                                },
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
+
+                membership, membership_created = Membership.objects.get_or_create(
+                    organization=invitation.organization,
+                    user=user,
+                    defaults={"role": invitation.role, "active": True},
+                )
+                if not membership_created and (
+                    membership.role != invitation.role or not membership.active
+                ):
+                    membership.role = invitation.role
+                    membership.active = True
+                    membership.save(update_fields=["role", "active", "updated_at"])
+
+                invitation.status = OrganizationInvitation.Status.ACCEPTED
+                invitation.accepted_at = timezone.now()
+                invitation.save(update_fields=["status", "accepted_at", "updated_at"])
+                AuditEvent.objects.record(
+                    action="invitation.accepted",
+                    actor=user,
+                    organization=invitation.organization,
+                    event_type="authorization",
+                    resource_type="organization_invitation",
+                    resource_id=invitation.id,
+                    metadata={
+                        "role": invitation.role,
+                        "created_account": created_account,
+                    },
+                    request=request,
+                )
+        except (InvalidInvitation, signing.BadSignature, TypeError, ValueError):
+            return Response(
+                {"detail": "This invitation is invalid, expired, or no longer active."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        signed_in = request.user.is_authenticated
+        if created_account:
+            login(
+                request,
+                user,
+                backend="django.contrib.auth.backends.ModelBackend",
+            )
+            signed_in = True
+        return Response(
+            {
+                "detail": (
+                    f"You have joined {invitation.organization.name}."
+                    if signed_in
+                    else (
+                        f"Invitation accepted. Sign in as {invitation.email} to open "
+                        f"{invitation.organization.name}."
+                    )
+                ),
+                "signedIn": signed_in,
+                "createdAccount": created_account,
+                "organization": OrganizationSerializer(invitation.organization).data,
+                "user": UserSummarySerializer(user).data,
+            }
+        )
+
+
+class PasswordResetRequestView(APIView):
+    authentication_classes: list[type[BaseAuthentication]] = []
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "password_reset_request"
+
+    def post(self, request):
+        serializer = PasswordResetRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = User.objects.filter(
+            email__iexact=serializer.validated_data["email"], is_active=True
+        ).first()
+        if user is not None and user.has_usable_password():
+            delivery, _ = queue_password_reset(user)
+            AuditEvent.objects.record(
+                action="password.reset_queued",
+                actor=user,
+                event_type="authentication",
+                resource_type="password_reset_delivery",
+                resource_id=delivery.id,
+                request=request,
+            )
+        return Response(
+            {
+                "detail": (
+                    "If an active account matches that email, private reset "
+                    "instructions will arrive shortly."
+                )
+            },
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+
+class PasswordResetInspectView(APIView):
+    authentication_classes: list[type[BaseAuthentication]] = []
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "password_reset_token"
+
+    def post(self, request):
+        serializer = PasswordResetTokenSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = password_reset_user(**serializer.validated_data)
+        if user is None:
+            return Response(
+                {"detail": "This password reset link is invalid or has expired."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response({"email": user.email, "valid": True})
+
+
+class PasswordResetConfirmView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "password_reset_token"
+
+    def post(self, request):
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        with transaction.atomic():
+            user = password_reset_user(
+                serializer.validated_data["uid"],
+                serializer.validated_data["token"],
+                for_update=True,
+            )
+            if user is None:
+                return Response(
+                    {"detail": "This password reset link is invalid or has expired."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if request.user.is_authenticated and request.user.id != user.id:
+                return Response(
+                    {
+                        "detail": (
+                            "Sign out before resetting a different account's password."
+                        )
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            try:
+                validate_password(serializer.validated_data["password"], user=user)
+            except DjangoValidationError as exc:
+                return Response(
+                    {"password": exc.messages},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            user.set_password(serializer.validated_data["password"])
+            user.save(update_fields=["password"])
+            Token.objects.filter(user=user).delete()
+            PasswordResetDelivery.objects.filter(
+                user=user, status=PasswordResetDelivery.Status.PENDING
+            ).update(
+                status=PasswordResetDelivery.Status.CANCELLED,
+                updated_at=timezone.now(),
+            )
+            AuditEvent.objects.record(
+                action="password.reset_completed",
+                actor=user,
+                event_type="authentication",
+                resource_type="user",
+                resource_id=user.id,
+                request=request,
+            )
+        if request.user.is_authenticated:
+            logout(request)
+        return Response(
+            {
+                "detail": (
+                    "Your password has been changed. Sign in with the new password."
+                ),
+                "email": user.email,
+            }
+        )
+
+
+class LoginView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [LoginAccountRateThrottle, ScopedRateThrottle]
+    throttle_scope = "auth_login_ip"
+
+    def post(self, request):
+        SessionAuthentication().enforce_csrf(request)
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = authenticate(
@@ -210,11 +547,44 @@ class LoginView(APIView):
             )
 
         login(request, user)
-        token, _ = Token.objects.get_or_create(user=user)
         AuditEvent.objects.record(
             action="auth.login",
             actor=user,
             event_type="authentication",
+            request=request,
+        )
+        return Response({"user": UserSummarySerializer(user).data})
+
+
+class TokenLoginView(APIView):
+    authentication_classes: list[type[BaseAuthentication]] = []
+    permission_classes = [AllowAny]
+    throttle_classes = [LoginAccountRateThrottle, ScopedRateThrottle]
+    throttle_scope = "auth_login_ip"
+
+    def post(self, request):
+        serializer = LoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = authenticate(
+            request,
+            username=serializer.validated_data["email"],
+            password=serializer.validated_data["password"],
+        )
+        if user is None or not user.is_active:
+            return Response(
+                {"detail": "Invalid credentials."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        token, _ = Token.objects.get_or_create(user=user)
+        if token_is_expired(token):
+            token.delete()
+            token = Token.objects.create(user=user)
+        AuditEvent.objects.record(
+            action="auth.token_issued",
+            actor=user,
+            event_type="authentication",
+            resource_type="user",
+            resource_id=user.id,
             request=request,
         )
         return Response({"user": UserSummarySerializer(user).data, "token": token.key})
@@ -367,6 +737,178 @@ class OrganizationDetailView(APIView):
         return Response(OrganizationSerializer(organization).data)
 
 
+class OrganizationInvitationListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, slug):
+        organization = scoped_organization(request, slug)
+        require_admin(require_membership(request.user, organization))
+        invitations = OrganizationInvitation.objects.filter(
+            organization=organization
+        ).select_related("invited_by")[:100]
+        return Response(OrganizationInvitationSerializer(invitations, many=True).data)
+
+    def post(self, request, slug):
+        organization = scoped_organization(request, slug)
+        actor_membership = require_admin(require_membership(request.user, organization))
+        serializer = CreateOrganizationInvitationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        email = serializer.validated_data["email"]
+        role = serializer.validated_data["role"]
+        if (
+            role == Membership.Role.OWNER
+            and actor_membership.role != Membership.Role.OWNER
+        ):
+            return Response(
+                {"detail": "Only an owner may invite another owner."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if Membership.objects.filter(
+            organization=organization,
+            user__email__iexact=email,
+            active=True,
+        ).exists():
+            return Response(
+                {"detail": "That person is already an active team member."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        invitation, created = prepare_team_invitation(
+            organization=organization,
+            email=email,
+            role=role,
+            invited_by=request.user,
+        )
+
+        delivered = send_team_invitation(invitation)
+        invitation.refresh_from_db()
+        AuditEvent.objects.record(
+            action="invitation.created" if created else "invitation.refreshed",
+            actor=request.user,
+            organization=organization,
+            event_type="authorization",
+            resource_type="organization_invitation",
+            resource_id=invitation.id,
+            metadata={"role": role, "email_delivered": delivered},
+            request=request,
+        )
+        return Response(
+            OrganizationInvitationSerializer(invitation).data,
+            status=(status.HTTP_201_CREATED if created else status.HTTP_200_OK),
+        )
+
+
+class OrganizationInvitationDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, slug, invitation_id):
+        organization = scoped_organization(request, slug)
+        actor_membership = require_admin(require_membership(request.user, organization))
+        with transaction.atomic():
+            try:
+                invitation = OrganizationInvitation.objects.select_for_update().get(
+                    organization=organization, id=invitation_id
+                )
+            except OrganizationInvitation.DoesNotExist as exc:
+                raise Http404 from exc
+            if (
+                invitation.role == Membership.Role.OWNER
+                and actor_membership.role != Membership.Role.OWNER
+            ):
+                return Response(
+                    {"detail": "Only an owner may revoke an owner invitation."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            if invitation.status != OrganizationInvitation.Status.PENDING:
+                return Response(
+                    {"detail": "Only a pending invitation can be revoked."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            invitation.status = OrganizationInvitation.Status.REVOKED
+            invitation.revoked_at = timezone.now()
+            invitation.token_version += 1
+            invitation.save(
+                update_fields=[
+                    "status",
+                    "revoked_at",
+                    "token_version",
+                    "updated_at",
+                ]
+            )
+            AuditEvent.objects.record(
+                action="invitation.revoked",
+                actor=request.user,
+                organization=organization,
+                event_type="authorization",
+                resource_type="organization_invitation",
+                resource_id=invitation.id,
+                metadata={"role": invitation.role},
+                request=request,
+            )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class OrganizationInvitationResendView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, slug, invitation_id):
+        organization = scoped_organization(request, slug)
+        actor_membership = require_admin(require_membership(request.user, organization))
+        with transaction.atomic():
+            try:
+                invitation = (
+                    OrganizationInvitation.objects.select_for_update()
+                    .select_related("invited_by", "organization")
+                    .get(organization=organization, id=invitation_id)
+                )
+            except OrganizationInvitation.DoesNotExist as exc:
+                raise Http404 from exc
+            if (
+                invitation.role == Membership.Role.OWNER
+                and actor_membership.role != Membership.Role.OWNER
+            ):
+                return Response(
+                    {"detail": "Only an owner may resend an owner invitation."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            if invitation.status != OrganizationInvitation.Status.PENDING:
+                return Response(
+                    {"detail": "Only a pending invitation can be resent."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            invitation.token_version += 1
+            invitation.expires_at = invitation_expiry()
+            invitation.email_sent_at = None
+            invitation.email_last_attempt_at = None
+            invitation.email_attempts = 0
+            invitation.invited_by = request.user
+            invitation.save(
+                update_fields=[
+                    "token_version",
+                    "expires_at",
+                    "email_sent_at",
+                    "email_last_attempt_at",
+                    "email_attempts",
+                    "invited_by",
+                    "updated_at",
+                ]
+            )
+
+        delivered = send_team_invitation(invitation)
+        invitation.refresh_from_db()
+        AuditEvent.objects.record(
+            action="invitation.resent",
+            actor=request.user,
+            organization=organization,
+            event_type="authorization",
+            resource_type="organization_invitation",
+            resource_id=invitation.id,
+            metadata={"role": invitation.role, "email_delivered": delivered},
+            request=request,
+        )
+        return Response(OrganizationInvitationSerializer(invitation).data)
+
+
 class MembershipListView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -421,10 +963,22 @@ class MembershipDetailView(APIView):
     def patch(self, request, slug, membership_id):
         organization = scoped_organization(request, slug)
         actor_membership = require_admin(require_membership(request.user, organization))
+        # Serialize role changes for one organization so concurrent owner updates
+        # cannot both pass the "last active owner" check.
+        list(
+            Membership.objects.select_for_update()
+            .filter(organization=organization)
+            .order_by("id")
+            .values_list("id", flat=True)
+        )
         try:
-            membership = Membership.objects.select_related("user").get(
-                organization=organization,
-                id=membership_id,
+            membership = (
+                Membership.objects.select_for_update()
+                .select_related("user")
+                .get(
+                    organization=organization,
+                    id=membership_id,
+                )
             )
         except Membership.DoesNotExist as exc:
             raise Http404 from exc

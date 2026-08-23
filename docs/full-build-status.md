@@ -1,58 +1,53 @@
-# Project Hope full-build status
+# Project Hope product-readiness evidence
 
 Date: 2026-08-23
 
-The complete roadmap is implemented as a release-hardened, self-hosted product baseline in the repository. Domain records are organization-scoped, the web/mobile clients use the same API boundary, and consequential actions remain reviewable or deterministic.
+Project Hope is a broad, installable product baseline—not a field-validated finished charity platform. This document separates code that exists from integrations, human validation, and commercial operations that still require proof. A model, endpoint, or automated test is not presented as evidence that a real charity workflow has passed acceptance testing.
 
-| Roadmap area | Implementation | Verification |
+## Status language
+
+- **Implemented:** the path exists in the repository and has automated coverage.
+- **Baseline:** useful domain/API behavior exists, but the full workflow or specialist interface is not yet proven.
+- **Integration required:** organization-owned infrastructure, credentials, or policy must be connected and tested.
+- **External validation required:** acceptance depends on charity users, accessibility participants, bilingual reviewers, safety specialists, or independent review.
+- **Not implemented:** the original specification names a capability that this repository does not yet supply.
+
+## Current evidence by product area
+
+| Product area | What is implemented now | What remains before a production claim |
 |---|---|---|
-| Identity, organizations, RBAC, tenant isolation | Django identity app and scoped APIs | Authorization matrix tests |
-| Founding 10 acquisition | Consent-based application, campaign attribution, signed email verification, duplicate protection, admin stages, aggregate metrics, and automated retention | Backend API/command tests and web interaction/build checks |
-| Audit and privacy foundation | Append-only events, retention policies, export command | Audit and command checks |
-| CRM | Contacts, households, relationships, interactions, consent | Tenant/API tests |
-| Volunteers | Applications, pipeline review, profiles, skills, availability | Acceptance/review test |
-| Scheduling | Programs, events, shifts, waitlist, iCalendar export | Calendar test |
-| Documents | Secure model, uploaded-file metadata, extraction, passages, search | Extraction/search test |
-| AI gateway/workflows | Ollama-backed local chat and embedding models with deterministic fail-closed fallback, schema-shaped outputs, risk flags, review states, and model readiness health | Live Ollama smoke checks, gateway unit tests, workflow tests |
-| Email assistant | Mailbox/message records, IMAP minimization, drafting, approval, SMTP send | Mailpit/container test |
-| Analytics | Metric definitions, snapshots, summaries | Metrics test |
-| Grants | Workspaces, questions, evidence workflow, deterministic budget validation | Budget test |
-| Community resources | Search, language/accessibility filtering, freshness, verification, scoped public API | Public API test |
-| Translation | Local glossary fallback, jobs, memory, human review | Translation test |
-| Accessibility | Transformation records, plain-language adapter, human approval, accessible web/mobile UI | Frontend/mobile type checks |
-| PWA/offline | Manifest, service worker, offline shell, bounded local draft storage, and protected cache exclusions | Web build/test |
-| Voice | Consent/call records, bounded intent, safety flags, transfer/callback controls | Voice safety test |
-| Donor insights | Descriptive rule-based snapshots/cohorts with opt-out/reason codes | Cohort test |
-| Plugin catalogue | Manifest/permission validation, admin install/revoke, capability tokens, disabled-by-default execution boundary | Plugin governance test |
-| Public API | Scoped client issuance, one-time secret, explicit scopes, rate limit, public resources endpoint | Client/API test |
-| Native mobile | Expo client with token authentication, secure storage, live tenant-scoped records, expiring safe snapshots, offline note, accessibility states, release configuration, and fail-closed production API URL handling | Frozen install, TypeScript check, Expo config, web export, and Expo doctor |
-| Charity onboarding | Guided Windows/macOS/Linux setup helper, friendly lifecycle commands, plain-language operator guide, and in-app first-run path | Helper doctor/setup smoke, web tests/build, live health/root smoke |
-| App distribution | Installable standalone web app, hosted-workspace distribution guide, and Expo iPhone/Android release configuration | PWA manifest/build, mobile Expo config/export, Expo Doctor, web tests/build |
-| Desktop installers | Native Windows, macOS, and Linux installers with hosted-workspace preconfiguration, first-run connection screen, and update channel | Desktop TypeScript build, electron-builder targets, clean-runner build step, and Linux package metadata |
-| Operations | Docker/Podman stack, worker, model registry, backups, retention/export commands, Django admin, reverse-proxy routing, production static volume | Dev and production Compose validation, startup smoke tests, static/admin route checks |
+| Identity, organizations, RBAC, tenant isolation | Case-normalized email users, Django password hashing, sessions, expiring native tokens, non-enumerating one-time password recovery, organizations, five membership roles, scoped lookups, append-only access events | OIDC/MFA application integration, privileged-session policy, independent authorization testing |
+| Team onboarding | Expiring single-use signed invitations, first-account password setup, existing-account acceptance, owner/admin role rules, resend/revoke, mail retry, bootstrap command, in-app Team & access UI | Production SMTP validation and a real nontechnical-admin acceptance test |
+| Founding 10 acquisition | Consent-based application, attribution, signed email confirmation, duplicate privacy, metrics, retention commands | Public managed deployment, monitored privacy/support contacts, verified SMTP, real applicants; current verified count is tracked separately and must never be inferred from test data |
+| Audit and retention | Append-only events, legal holds, retention preview/execute, tenant export | Organization-approved schedules, encrypted backup and restore evidence, incident rehearsal |
+| CRM | Organization-scoped contacts, households, relationships, interactions, consent, sensitivity fields, basic create/list UI | Sample-spreadsheet import/correction/export acceptance, duplicate-resolution UX, charity vocabulary validation |
+| Volunteers | Applications, profiles, skills, availability, review/promotion controls | Public applicant portal, configurable forms/waivers, complete recruitment-to-shift field test |
+| Scheduling | Events, waitlist records, iCalendar export, tenant controls | Full recurrence/cancellation/reminder behavior, room conflicts, public booking, real coordinator acceptance |
+| Documents and search | Upload limits, MIME/magic-byte/archive checks, extraction records, passages, scoped text search, legal-hold protection | Malware-scanner integration, OCR/Tika/Docling pipeline, semantic retrieval quality, permission/location acceptance corpus |
+| AI gateway | Authenticated sidecar, Ollama chat/embedding adapters, deterministic fail-closed fallback, structured bounded operations, provenance fields, and a dated v1.6 live smoke pass with `qwen3:4b` plus `all-minilm` on one Windows host | Published task-specific evaluations, adversarial corpus expansion, broader hardware/model support matrix, real-user usefulness validation |
+| Email assistant | Mailbox/message/draft records, polling command, explicit approval before SMTP send | Production IMAP/SMTP integration, cited-draft specialist UI, adversarial-message field test, retention approval |
+| Analytics | Metric definitions, snapshots, summaries | Complete dashboards/exports and proof that each live metric has an owner, definition, date range, and reproducible query |
+| Grants | Workspaces/questions, evidence fields, deterministic budget validation, bounded draft operation | Source-comparison drafting interface, version comparison/export, named-approver field workflow |
+| Community resources | Service records, filters, provenance/freshness fields, verification action, scoped public endpoint | Map/geospatial production search, correction flow, freshness ownership and expired-record acceptance test |
+| Translation | Jobs, memory/glossary records, review action, local/gateway adapter | Segment-comparison specialist UI, RTL review, bilingual reviewer acceptance, high-risk content policy test |
+| Accessibility | Semantic responsive web foundation, visible focus, reduced-motion support, transformation/review records, and [v1.6 automated/browser-assisted evidence](accessibility-audit-v1.6.md) | Manual WCAG 2.2 AA audit, screen-reader/keyboard/zoom testing, tagged export validation, testing with users with disabilities |
+| Installable web app | Manifest/service-worker shell connected to the hosted organization workspace; local record/note caching is intentionally excluded | Remote device/session administration, lost-device acceptance, and browser-install validation |
+| Voice | Consent/call records, bounded intents, safety flags, callback/transfer state | Real telephony, speech-to-text/text-to-speech, unsupported/emergency live test; no production receptionist claim yet |
+| Donor insights | Descriptive snapshots/cohorts, opt-out and reason fields | Independent ethics/privacy/fundraising review and production data-quality validation |
+| Plugins | Catalogue/install records, declared permissions, capability-token issuance/revocation | Signed artefacts, SBOM verification, isolated runtime sandbox, malicious-plugin test; no marketplace claim yet |
+| Public API | Tenant-scoped client records, one-time client secret, explicit scopes, resource endpoint | OAuth/OIDC client flow, signed webhooks, idempotency coverage, developer portal, schema fuzzing/BOLA suite |
+| Mobile | Expo client, secure token storage, connected tenant API surfaces, fail-closed production URL configuration, and upgrade cleanup for legacy local record/note caches | Organization-owned Apple/Google signing, store review, device matrix and mobile accessibility acceptance |
+| Desktop | Windows/macOS/Linux Electron installers, first-run workspace URL, update metadata | Organization-owned signing/notarization and warning-free distribution; public generic installers are currently unsigned |
+| Operations | Development/production Compose, Gunicorn/Caddy, worker, local models, backup/restore scripts, setup helpers | Live production environment, pinned container digests, monitored backups, completed restore drill, incident/support rota |
+| Managed commercial service | Founding Partner positioning and privacy-minimized pilot funnel | Hosted control plane, billing lifecycle, service terms/DPA, support tooling, operating entity/account, and verified paying customers |
+| Repository licensing | Public source code | **No LICENSE file exists.** GitHub reports no license. The copyright owner must choose and approve a community/commercial licensing strategy before “open source” or reuse rights are claimed |
 
-## Required external runtimes
+## Verification evidence
 
-The software paths are implemented without paid dependencies. The default Compose stack now provisions Ollama with a local chat model and semantic embedding model. Tika/OCRmyPDF/Tesseract, Docling, Whisper/faster-whisper, Kokoro, Asterisk/SIP, and Keycloak/OIDC federation remain separate operator-owned integrations because they require host binaries, model storage, hardware, telephony accounts, or identity policy. The deterministic adapter remains the safe fallback when those runtimes are absent; it never claims semantic model quality or performs side effects.
+The quality gate runs Django checks, migration drift, Ruff, formatting, Mypy, Python dependency audit, SQLite and PostgreSQL suites, web tests/build, automated axe checks, mobile TypeScript/export/security mitigation, desktop build/audit, and development/production Compose validation. Native installer workflows build on all three operating systems for version tags.
 
-## Verification run
+The latest local verification for the team-onboarding change is recorded in its release notes and commit checks. On 2026-08-23, the live AI smoke suite also exercised classification, drafting, translation, plain-language rewriting, evidence-grounded grant answers, 384-dimension embeddings, and the deterministic crisis override against the configured local Ollama models. Test fixtures and demo accounts are synthetic and do not count as customers, pilots, external reviewers, or charity acceptance evidence.
 
-- Local Django suite: 34 tests passed.
-- AI gateway unit suite: 7 tests passed.
-- Containerized Django suite against PostgreSQL/pgvector: 34 tests passed.
-- Ruff lint/format: passed.
-- Mypy: passed.
-- Migration drift check: passed.
-- Web Vitest: passed.
-- Web TypeScript/Vite build: passed.
-- Public WCAG A/AA Chrome scan: zero automated violations after contrast remediation; keyboard, labels, heading order, focus visibility, and 320px reflow checked. See [1.5 accessibility audit](accessibility-audit-v1.5.md).
-- Mobile TypeScript check: passed.
-- Docker Compose build: passed.
-- Docker Compose startup: passed; reverse-proxy health and AI gateway health confirmed.
-- Production Compose topology: passed; Gunicorn health, collected static assets, Caddy routing, and worker ordering validated with synthetic configuration.
-- AI gateway boundary: passed; configured internal calls use the authenticated Ollama-backed bounded sidecar with model readiness reporting and deterministic fallback.
-- Live local AI smoke: passed; `qwen3:4b` generated structured classification, drafting, translation, plain-language, and evidence answers; `all-minilm` generated 384-dimensional semantic embeddings.
-- Upload safety: passed; document size and MIME limits are enforced before persistence.
-- Legal hold safety: passed; direct deletes are blocked for held record types and retention execution is audited.
-- Admin boundary: passed; retention policies and AI model registry are not readable by viewer-role members.
-- Django admin route: passed; `/admin/` is proxied to the authenticated operational UI.
+## Release gate
+
+A stable tag proves that the repository built and its automated gates passed. It does not prove a managed service is live, installers are signed, every optional runtime is connected, or charities have validated the workflows. Those claims require dated external evidence. The original PDF’s field-validation exit conditions remain open until that evidence is linked here.

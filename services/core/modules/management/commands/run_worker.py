@@ -22,6 +22,8 @@ class Command(BaseCommand):
             management.call_command("poll_mailboxes", verbosity=0)
             management.call_command("process_documents", verbosity=0)
             management.call_command("retry_pilot_verification_emails", verbosity=0)
+            management.call_command("retry_organization_invitations", verbosity=0)
+            management.call_command("retry_password_reset_deliveries", verbosity=0)
             now = time.monotonic()
             if now >= next_pilot_cleanup:
                 management.call_command(

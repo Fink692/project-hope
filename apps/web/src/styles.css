@@ -151,6 +151,7 @@ h1 { margin-bottom: 0; font-size: 1rem; letter-spacing: -.02em; }
 .sign-in-form { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) auto; gap: 1rem; align-items: end; max-width: 900px; }
 .sign-in-form label, .organization-select { display: grid; gap: .45rem; color: var(--muted); font-size: .8rem; font-weight: 750; }
 .sign-in-form input, .organization-select select { width: 100%; min-height: 2.8rem; border: 1px solid var(--line); border-radius: .55rem; padding: .65rem .75rem; background: var(--paper); color: var(--ink); font: inherit; }
+.sign-in-reset { grid-column: 1 / -1; justify-self: start; }
 .form-error { grid-column: 1 / -1; margin: 0; color: #a83f31; font-weight: 700; }
 .onboarding-card { display: grid; grid-template-columns: .8fr 1.5fr auto; gap: 1.5rem; align-items: center; margin-top: 2rem; padding: 1.25rem; border: 1px solid var(--line); border-radius: 1rem; background: var(--paper); }
 .onboarding-card h3 { margin: 0 0 .5rem; font-size: 1.25rem; letter-spacing: -.03em; }
@@ -198,7 +199,7 @@ h1 { margin-bottom: 0; font-size: 1rem; letter-spacing: -.02em; }
 .module-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .55rem; margin: 1.5rem 0 1rem; }
 .search-field { flex: 1 1 220px; }
 .search-field input, .record-form input, .record-form select, .record-form textarea { width: 100%; border: 1px solid var(--line); border-radius: .55rem; padding: .7rem .75rem; background: var(--paper); color: var(--ink); font: inherit; }
-.search-field input:focus, .record-form input:focus, .record-form select:focus, .record-form textarea:focus, .sign-in-form input:focus, .organization-select select:focus, .offline-pad textarea:focus { outline: 3px solid rgba(223, 118, 91, .35); outline-offset: 1px; border-color: var(--coral); }
+.search-field input:focus, .record-form input:focus, .record-form select:focus, .record-form textarea:focus, .sign-in-form input:focus, .organization-select select:focus { outline: 3px solid rgba(223, 118, 91, .35); outline-offset: 1px; border-color: var(--coral); }
 .compact { padding: .62rem .85rem; border: 1px solid var(--line); cursor: pointer; }
 .button:disabled { cursor: wait; opacity: .6; }
 .record-form { background: #f4f0e8; border: 1px solid var(--line); border-radius: .8rem; padding: 1rem; margin: 1rem 0 1.5rem; }
@@ -210,6 +211,42 @@ h1 { margin-bottom: 0; font-size: 1rem; letter-spacing: -.02em; }
 .form-hint { color: var(--muted); font-size: .78rem; }
 .error-state { background: #fff5f2; border-color: #e7b1a2; }
 .loading-state { padding: 1rem 0; color: var(--muted); }
-.offline-pad { display: grid; grid-template-columns: 1fr 1.3fr; gap: 1rem; margin-top: 2rem; border-top: 1px solid var(--line); padding-top: 1.5rem; }.offline-pad h4 { margin: 0 0 .35rem; font-size: 1.1rem; }.offline-pad p:not(.eyebrow) { margin: 0; color: var(--muted); line-height: 1.45; }.offline-pad textarea { min-height: 110px; resize: vertical; border: 1px solid var(--line); border-radius: .6rem; padding: .75rem; background: #faf8f2; color: var(--ink); font: inherit; }.offline-pad-footer { grid-column: 2; display: flex; align-items: center; gap: .8rem; }.offline-pad-footer span { color: var(--muted); font-size: .8rem; }
+.invitation-acceptance { min-height: min(760px, calc(100vh - 8rem)); display: grid; grid-template-columns: minmax(260px, .7fr) minmax(420px, 1.3fr); margin: 2rem 0 5rem; overflow: hidden; border: 1px solid var(--line); border-radius: 1.5rem; background: var(--paper); box-shadow: 0 30px 70px rgba(22, 57, 51, .14); }
+.invitation-visual { position: relative; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; padding: clamp(2rem, 5vw, 4rem); background: var(--forest); color: #f8f5ed; }
+.invitation-visual::after { position: absolute; width: 24rem; height: 24rem; right: -12rem; bottom: -10rem; border: 4rem solid rgba(240, 175, 157, .24); border-radius: 50%; content: ""; }
+.invitation-visual span { display: grid; place-items: center; width: 3.5rem; height: 3.5rem; border-radius: 1rem; background: #f0af9d; color: var(--forest); font-size: 1.5rem; font-weight: 900; }
+.invitation-visual p { position: relative; z-index: 1; max-width: 280px; margin: 0; color: #d9e4df; font-size: clamp(1.5rem, 3vw, 2.7rem); font-weight: 750; line-height: 1.05; letter-spacing: -.045em; }
+.invitation-card { align-self: center; width: min(100%, 680px); padding: clamp(2rem, 6vw, 5rem); }
+.invitation-card h2 { margin: .4rem 0 1.1rem; font-size: clamp(2.5rem, 6vw, 5rem); line-height: .9; letter-spacing: -.07em; }
+.invitation-lede { max-width: 580px; color: var(--muted); line-height: 1.65; }
+.invitation-form { margin-top: 2rem; }
+.standalone-field { display: grid; gap: .4rem; color: var(--muted); font-size: .8rem; font-weight: 750; }
+.invitation-form input, .team-invite-form input, .team-invite-form select, .role-control select { width: 100%; min-height: 2.8rem; border: 1px solid var(--line); border-radius: .55rem; padding: .65rem .75rem; background: white; color: var(--ink); font: inherit; }
+.invitation-form input:focus, .team-invite-form input:focus, .team-invite-form select:focus, .role-control select:focus { outline: 3px solid rgba(223, 118, 91, .35); outline-offset: 1px; border-color: var(--coral); }
+.invitation-existing { padding: 1.1rem; border-left: 4px solid #6e9a88; border-radius: .2rem .75rem .75rem .2rem; background: #edf4ef; }
+.invitation-existing p { margin: .4rem 0 0; color: var(--muted); line-height: 1.5; }
+.team-invite-form { display: grid; grid-template-columns: 1.1fr 1fr .7fr auto; gap: .8rem; align-items: end; margin: 1.5rem 0; padding: 1.2rem; border-radius: 1rem; background: #e7efe9; }
+.team-invite-form h4 { margin: .15rem 0 0; font-size: 1rem; }
+.team-invite-form label { display: grid; gap: .35rem; color: var(--muted); font-size: .8rem; font-weight: 750; }
+.team-notice { margin: 1rem 0; padding: .8rem 1rem; border: 1px solid #92bfa0; border-radius: .7rem; background: #e7f4e9; color: #245d3b; font-weight: 700; }
+.team-section { margin-top: 2rem; }
+.team-section + .team-section { padding-top: 2rem; border-top: 1px solid var(--line); }
+.team-section-heading { display: flex; justify-content: space-between; align-items: end; gap: 1rem; margin-bottom: .6rem; }
+.team-section-heading h4 { margin: .2rem 0 0; font-size: 1.35rem; letter-spacing: -.03em; }
+.team-section-heading > span { color: var(--muted); font-size: .8rem; font-weight: 750; }
+.team-list, .invitation-list { display: grid; }
+.team-list article { display: grid; grid-template-columns: auto minmax(160px, 1fr) minmax(150px, .45fr) auto; gap: .9rem; align-items: center; min-height: 4.5rem; border-top: 1px solid var(--line); }
+.team-list article.inactive { opacity: .65; }
+.avatar { display: grid; place-items: center; width: 2.4rem; height: 2.4rem; border-radius: 50%; background: #cfdbed; color: var(--forest); font-weight: 900; }
+.team-person strong, .team-person small, .invitation-list strong, .invitation-list small { display: block; }
+.team-person small, .invitation-list small { margin-top: .2rem; color: var(--muted); }
+.role-control select { min-height: 2.4rem; padding: .45rem .6rem; }
+.role-badge { justify-self: end; padding: .35rem .6rem; border-radius: 99px; background: #e5e2d9; color: var(--muted); font-size: .75rem; font-weight: 750; }
+.text-button.danger { color: #983727; }
+.text-button:disabled { cursor: not-allowed; opacity: .5; }
+.invitation-list article { display: flex; justify-content: space-between; gap: 1rem; align-items: center; min-height: 4.3rem; border-top: 1px solid var(--line); }
+.inline-actions { display: flex; gap: .8rem; }
 @media (max-width: 850px) { .workspace-header { align-items: flex-start; flex-direction: column; }.workspace-controls { align-items: center; width: 100%; justify-content: space-between; }.workspace-layout { grid-template-columns: 1fr; }.module-nav { display: flex; gap: .25rem; overflow-x: auto; padding-bottom: .5rem; }.module-nav button { white-space: nowrap; border-left: 0; border-bottom: 2px solid transparent; }.module-nav button:hover, .module-nav button.selected { border-bottom-color: var(--coral); border-left-color: transparent; }.module-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }.sign-in-form { grid-template-columns: 1fr 1fr; }.sign-in-form button { grid-column: 1 / -1; justify-self: start; }.onboarding-card { grid-template-columns: 1fr; }.onboarding-steps { grid-template-columns: repeat(3, 1fr); }.download-grid { grid-template-columns: 1fr; }.download-card { min-height: auto; } }
-@media (max-width: 520px) { .workspace { padding: 1.2rem; }.workspace-controls, .sign-in-form { display: grid; grid-template-columns: 1fr; }.workspace-controls .text-button { justify-self: start; }.module-grid { grid-template-columns: 1fr; }.sign-in-form button { grid-column: auto; }.offline-pad { grid-template-columns: 1fr; }.offline-pad-footer { grid-column: 1; }.form-grid { grid-template-columns: 1fr; }.form-grid label:has(textarea) { grid-column: auto; }.module-toolbar > .button { flex: 1 1 auto; }.onboarding-steps { grid-template-columns: 1fr; } }
+@media (max-width: 520px) { .workspace { padding: 1.2rem; }.workspace-controls, .sign-in-form { display: grid; grid-template-columns: 1fr; }.workspace-controls .text-button { justify-self: start; }.module-grid { grid-template-columns: 1fr; }.sign-in-form button { grid-column: auto; }.form-grid { grid-template-columns: 1fr; }.form-grid label:has(textarea) { grid-column: auto; }.module-toolbar > .button { flex: 1 1 auto; }.onboarding-steps { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .invitation-acceptance { grid-template-columns: 1fr; }.invitation-visual { min-height: 230px; }.invitation-visual p { max-width: 520px; }.team-invite-form { grid-template-columns: 1fr 1fr; }.team-invite-form > div { grid-column: 1 / -1; }.team-invite-form button { justify-self: start; }.team-list article { grid-template-columns: auto 1fr auto; }.team-list .role-control { grid-column: 2; }.team-list .danger { grid-column: 3; grid-row: 1 / span 2; } }
+@media (max-width: 560px) { .invitation-acceptance { margin-top: 1rem; border-radius: 1rem; }.invitation-visual { min-height: 180px; padding: 1.5rem; }.invitation-visual p { font-size: 1.5rem; }.invitation-card { padding: 1.5rem; }.team-invite-form { grid-template-columns: 1fr; }.team-invite-form > div { grid-column: auto; }.team-list article { grid-template-columns: auto 1fr; padding: .8rem 0; }.team-list .role-control, .team-list .danger { grid-column: 2; grid-row: auto; justify-self: start; }.invitation-list article { align-items: flex-start; flex-direction: column; padding: .8rem 0; } }

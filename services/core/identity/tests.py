@@ -4,6 +4,7 @@ from io import StringIO
 from urllib.parse import parse_qs, urlparse
 from unittest.mock import patch
 
+from django.conf import settings
 from django.core import mail
 from django.core.cache import cache
 from django.core import management
@@ -11,15 +12,27 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.authtoken.models import Token
-from rest_framework.test import APIClient
+from rest_framework.test import APIClient, APIRequestFactory
+from rest_framework.throttling import ScopedRateThrottle
 
 from audit.models import AuditEvent
 
-from .models import Membership, Organization, PilotApplication, User
+from .invitations import send_team_invitation
+from .models import (
+    Membership,
+    Organization,
+    OrganizationInvitation,
+    PasswordResetDelivery,
+    PilotApplication,
+    User,
+)
+from .passwords import send_password_reset_delivery
+from .throttles import LoginAccountRateThrottle
 
 
 class FoundationApiTests(TestCase):
     def setUp(self):
+        cache.clear()
         self.client = APIClient()
         self.alice = User.objects.create_user("alice@example.org", "Alice-password-123")
         self.bob = User.objects.create_user("bob@example.org", "Bob-password-123")
@@ -75,10 +88,10 @@ class FoundationApiTests(TestCase):
         unauthenticated = self.client.get("/api/v1/me/")
         self.assertIn(unauthenticated.status_code, (401, 403))
 
-    def test_login_issues_token_and_logout_revokes_it(self):
+    def test_mobile_token_login_issues_token_and_logout_revokes_it(self):
         response = self.client.post(
-            "/api/v1/auth/login/",
-            {"email": "alice@example.org", "password": "Alice-password-123"},
+            "/api/v1/auth/token/",
+            {"email": "ALICE@EXAMPLE.ORG", "password": "Alice-password-123"},
             format="json",
         )
         self.assertEqual(response.status_code, 200)
@@ -95,6 +108,133 @@ class FoundationApiTests(TestCase):
             200,
         )
         self.assertEqual(token_client.get("/api/v1/me/").status_code, 401)
+
+    def test_browser_login_requires_csrf_but_token_login_does_not(self):
+        csrf_client = APIClient(enforce_csrf_checks=True)
+        credentials = {
+            "email": "alice@example.org",
+            "password": "Alice-password-123",
+        }
+        rejected = csrf_client.post("/api/v1/auth/login/", credentials, format="json")
+        self.assertEqual(rejected.status_code, 403)
+
+        csrf_client.get("/api/v1/auth/csrf/")
+        csrf_token = csrf_client.cookies["csrftoken"].value
+        accepted = csrf_client.post(
+            "/api/v1/auth/login/",
+            credentials,
+            format="json",
+            HTTP_X_CSRFTOKEN=csrf_token,
+        )
+        self.assertEqual(accepted.status_code, 200, accepted.content)
+        self.assertNotIn("token", accepted.json())
+
+        token_client = APIClient(enforce_csrf_checks=True)
+        token_response = token_client.post(
+            "/api/v1/auth/token/", credentials, format="json"
+        )
+        self.assertEqual(token_response.status_code, 200, token_response.content)
+        self.assertIn("token", token_response.json())
+
+    @override_settings(
+        REST_FRAMEWORK={
+            **settings.REST_FRAMEWORK,
+            "NUM_PROXIES": 0,
+        }
+    )
+    def test_login_ip_ceiling_ignores_untrusted_forwarding_headers(self):
+        cache.clear()
+        account_rates = {
+            **LoginAccountRateThrottle.THROTTLE_RATES,
+            "auth_login_account": "100/minute",
+        }
+        scoped_rates = {
+            **ScopedRateThrottle.THROTTLE_RATES,
+            "auth_login_ip": "2/minute",
+        }
+        with (
+            patch.object(LoginAccountRateThrottle, "THROTTLE_RATES", account_rates),
+            patch.object(ScopedRateThrottle, "THROTTLE_RATES", scoped_rates),
+        ):
+            responses = [
+                APIClient().post(
+                    "/api/v1/auth/token/",
+                    {"email": f"unknown-{index}@example.org", "password": "wrong"},
+                    format="json",
+                    REMOTE_ADDR="192.0.2.44",
+                    HTTP_X_FORWARDED_FOR=f"203.0.113.{index + 10}",
+                )
+                for index in range(3)
+            ]
+
+        self.assertEqual(
+            [response.status_code for response in responses], [400, 400, 429]
+        )
+        audit_request = APIRequestFactory().get(
+            "/",
+            REMOTE_ADDR="192.0.2.44",
+            HTTP_X_FORWARDED_FOR="203.0.113.99",
+        )
+        event = AuditEvent.objects.record(action="proxy.test", request=audit_request)
+        self.assertEqual(str(event.ip_address), "192.0.2.44")
+
+    @override_settings(
+        REST_FRAMEWORK={
+            **settings.REST_FRAMEWORK,
+            "NUM_PROXIES": 0,
+        }
+    )
+    def test_login_account_ceiling_normalizes_email_across_addresses(self):
+        cache.clear()
+        account_rates = {
+            **LoginAccountRateThrottle.THROTTLE_RATES,
+            "auth_login_account": "2/minute",
+        }
+        scoped_rates = {
+            **ScopedRateThrottle.THROTTLE_RATES,
+            "auth_login_ip": "100/minute",
+        }
+        with (
+            patch.object(LoginAccountRateThrottle, "THROTTLE_RATES", account_rates),
+            patch.object(ScopedRateThrottle, "THROTTLE_RATES", scoped_rates),
+        ):
+            responses = [
+                APIClient().post(
+                    "/api/v1/auth/token/",
+                    {
+                        "email": email,
+                        "password": "wrong",
+                    },
+                    format="json",
+                    REMOTE_ADDR=f"192.0.2.{index + 10}",
+                )
+                for index, email in enumerate(
+                    ["ALICE@EXAMPLE.ORG", "alice@example.org", " Alice@Example.org "]
+                )
+            ]
+
+        self.assertEqual(
+            [response.status_code for response in responses], [400, 400, 429]
+        )
+
+    @override_settings(PROJECT_HOPE_API_TOKEN_MAX_AGE_SECONDS=60)
+    def test_native_api_tokens_expire_and_are_replaced_on_sign_in(self):
+        expired = Token.objects.create(user=self.alice)
+        Token.objects.filter(key=expired.key).update(
+            created=timezone.now() - timedelta(minutes=2)
+        )
+        token_client = APIClient()
+        token_client.credentials(HTTP_AUTHORIZATION=f"Token {expired.key}")
+        self.assertEqual(token_client.get("/api/v1/me/").status_code, 401)
+        self.assertFalse(Token.objects.filter(key=expired.key).exists())
+
+        replacement = APIClient().post(
+            "/api/v1/auth/token/",
+            {"email": self.alice.email, "password": "Alice-password-123"},
+            format="json",
+        )
+        self.assertEqual(replacement.status_code, 200, replacement.content)
+        self.assertNotEqual(replacement.json()["token"], expired.key)
 
     def test_user_can_create_organization_and_becomes_owner(self):
         self.login()
@@ -205,6 +345,26 @@ class FoundationApiTests(TestCase):
         )
         self.assertEqual(response.status_code, 403)
 
+    def test_an_organization_must_retain_an_active_owner(self):
+        self.login()
+
+        demote = self.client.patch(
+            f"/api/v1/organizations/alpha-charity/members/{self.alice_a.id}/",
+            {"role": "staff"},
+            format="json",
+        )
+        deactivate = self.client.patch(
+            f"/api/v1/organizations/alpha-charity/members/{self.alice_a.id}/",
+            {"active": False},
+            format="json",
+        )
+
+        self.assertEqual(demote.status_code, 400)
+        self.assertEqual(deactivate.status_code, 400)
+        self.alice_a.refresh_from_db()
+        self.assertEqual(self.alice_a.role, Membership.Role.OWNER)
+        self.assertTrue(self.alice_a.active)
+
     def test_audit_events_are_append_only(self):
         event = AuditEvent.objects.record(action="test.event", actor=self.alice)
 
@@ -213,6 +373,449 @@ class FoundationApiTests(TestCase):
             event.save()
         with self.assertRaises(ValidationError):
             event.delete()
+
+
+@override_settings(
+    EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+    PROJECT_HOPE_PUBLIC_URL="https://hope.example.org",
+    PROJECT_HOPE_INVITATION_MAX_AGE_SECONDS=604800,
+)
+class OrganizationInvitationApiTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        self.owner = User.objects.create_user("owner@example.org", "Owner-password-123")
+        self.admin = User.objects.create_user("admin@example.org", "Admin-password-123")
+        self.viewer = User.objects.create_user(
+            "viewer@example.org", "Viewer-password-123"
+        )
+        self.existing = User.objects.create_user(
+            "existing@example.org", "Existing-password-123"
+        )
+        self.organization = Organization.objects.create(
+            name="North Star Centre", slug="north-star-centre"
+        )
+        Membership.objects.create(
+            organization=self.organization,
+            user=self.owner,
+            role=Membership.Role.OWNER,
+        )
+        Membership.objects.create(
+            organization=self.organization,
+            user=self.admin,
+            role=Membership.Role.ADMIN,
+        )
+        Membership.objects.create(
+            organization=self.organization,
+            user=self.viewer,
+            role=Membership.Role.VIEWER,
+        )
+
+    def authenticate(self, user=None):
+        self.client.force_authenticate(user=user or self.owner)
+
+    def invite(self, email="new.person@example.org", role=Membership.Role.STAFF):
+        self.authenticate()
+        response = self.client.post(
+            "/api/v1/organizations/north-star-centre/invitations/",
+            {"email": email, "role": role},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        return response
+
+    def token_from_latest_email(self):
+        invitation_url = next(
+            line
+            for line in mail.outbox[-1].body.splitlines()
+            if line.startswith("https://")
+        )
+        return parse_qs(urlparse(invitation_url).fragment)["invite_token"][0]
+
+    def test_new_user_can_inspect_and_accept_a_single_use_invitation(self):
+        response = self.invite(email=" New.Person@Example.org ")
+        self.assertEqual(response.json()["email"], "new.person@example.org")
+        self.assertEqual(response.json()["delivery_status"], "sent")
+        self.assertEqual(len(mail.outbox), 1)
+        token = self.token_from_latest_email()
+
+        public_client = APIClient()
+        preview = public_client.post(
+            "/api/v1/invitations/inspect/", {"token": token}, format="json"
+        )
+        self.assertEqual(preview.status_code, 200, preview.content)
+        self.assertEqual(preview.json()["organization"]["name"], "North Star Centre")
+        self.assertEqual(preview.json()["roleLabel"], "Staff")
+        self.assertFalse(preview.json()["existingAccount"])
+
+        weak = public_client.post(
+            "/api/v1/invitations/accept/",
+            {
+                "token": token,
+                "password": "password",
+                "password_confirm": "password",
+            },
+            format="json",
+        )
+        self.assertEqual(weak.status_code, 400)
+        self.assertIn("password", weak.json())
+
+        accepted = public_client.post(
+            "/api/v1/invitations/accept/",
+            {
+                "token": token,
+                "first_name": "Amina",
+                "last_name": "Hope",
+                "password": "Cedar-River-4827!",
+                "password_confirm": "Cedar-River-4827!",
+            },
+            format="json",
+        )
+        self.assertEqual(accepted.status_code, 200, accepted.content)
+        self.assertTrue(accepted.json()["signedIn"])
+        self.assertTrue(accepted.json()["createdAccount"])
+        user = User.objects.get(email="new.person@example.org")
+        self.assertTrue(
+            Membership.objects.filter(
+                organization=self.organization,
+                user=user,
+                role=Membership.Role.STAFF,
+                active=True,
+            ).exists()
+        )
+        me = public_client.get("/api/v1/me/")
+        self.assertEqual(me.status_code, 200, me.content)
+        self.assertEqual(
+            me.json()["organizations"][0]["organization"]["slug"], "north-star-centre"
+        )
+
+        reused = APIClient().post(
+            "/api/v1/invitations/accept/",
+            {
+                "token": token,
+                "password": "Different-Cedar-4827!",
+                "password_confirm": "Different-Cedar-4827!",
+            },
+            format="json",
+        )
+        self.assertEqual(reused.status_code, 400)
+        self.assertTrue(
+            AuditEvent.objects.filter(
+                organization=self.organization,
+                action="invitation.accepted",
+                actor=user,
+            ).exists()
+        )
+
+    def test_existing_user_accepts_without_resetting_their_password(self):
+        self.invite(email=self.existing.email, role=Membership.Role.COORDINATOR)
+        token = self.token_from_latest_email()
+
+        public_client = APIClient()
+        accepted = public_client.post(
+            "/api/v1/invitations/accept/", {"token": token}, format="json"
+        )
+        self.assertEqual(accepted.status_code, 200, accepted.content)
+        self.assertFalse(accepted.json()["createdAccount"])
+        self.assertFalse(accepted.json()["signedIn"])
+        self.existing.refresh_from_db()
+        self.assertTrue(self.existing.check_password("Existing-password-123"))
+        self.assertTrue(
+            Membership.objects.filter(
+                organization=self.organization,
+                user=self.existing,
+                role=Membership.Role.COORDINATOR,
+            ).exists()
+        )
+
+    def test_role_permissions_resend_and_revocation_invalidate_old_links(self):
+        self.client.force_authenticate(user=self.viewer)
+        forbidden_list = self.client.get(
+            "/api/v1/organizations/north-star-centre/invitations/"
+        )
+        self.assertEqual(forbidden_list.status_code, 403)
+
+        self.client.force_authenticate(user=self.admin)
+        forbidden_owner = self.client.post(
+            "/api/v1/organizations/north-star-centre/invitations/",
+            {"email": "second-owner@example.org", "role": "owner"},
+            format="json",
+        )
+        self.assertEqual(forbidden_owner.status_code, 403)
+
+        invited = self.invite(email="resend@example.org")
+        invitation_id = invited.json()["id"]
+        old_token = self.token_from_latest_email()
+        resent = self.client.post(
+            f"/api/v1/organizations/north-star-centre/invitations/{invitation_id}/resend/",
+            {},
+            format="json",
+        )
+        self.assertEqual(resent.status_code, 200, resent.content)
+        self.assertEqual(len(mail.outbox), 2)
+        new_token = self.token_from_latest_email()
+        self.assertNotEqual(old_token, new_token)
+        self.assertEqual(
+            APIClient()
+            .post(
+                "/api/v1/invitations/inspect/",
+                {"token": old_token},
+                format="json",
+            )
+            .status_code,
+            400,
+        )
+
+        revoked = self.client.delete(
+            f"/api/v1/organizations/north-star-centre/invitations/{invitation_id}/"
+        )
+        self.assertEqual(revoked.status_code, 204)
+        self.assertEqual(
+            APIClient()
+            .post(
+                "/api/v1/invitations/inspect/",
+                {"token": new_token},
+                format="json",
+            )
+            .status_code,
+            400,
+        )
+
+    def test_expired_invitation_is_not_accepted(self):
+        self.invite(email="expired@example.org")
+        token = self.token_from_latest_email()
+        OrganizationInvitation.objects.update(
+            expires_at=timezone.now() - timedelta(seconds=1)
+        )
+
+        response = APIClient().post(
+            "/api/v1/invitations/accept/",
+            {
+                "token": token,
+                "password": "Cedar-River-4827!",
+                "password_confirm": "Cedar-River-4827!",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(User.objects.filter(email="expired@example.org").exists())
+
+    @patch("identity.invitations.logger.exception")
+    @patch("identity.invitations.send_mail", side_effect=OSError("relay unavailable"))
+    def test_failed_invitation_mail_is_recorded_and_retried(
+        self, _failed_mail, logged_failure
+    ):
+        response = self.invite(email="retry@example.org")
+        self.assertEqual(response.json()["delivery_status"], "retrying")
+        invitation = OrganizationInvitation.objects.get(email="retry@example.org")
+        logged_failure.assert_called_once()
+        self.assertEqual(invitation.email_attempts, 1)
+        self.assertIsNone(invitation.email_sent_at)
+        with patch("identity.invitations.send_mail", return_value=1) as early_retry:
+            self.assertFalse(send_team_invitation(invitation))
+        early_retry.assert_not_called()
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.email_attempts, 1)
+        invitation.email_last_attempt_at = timezone.now() - timedelta(hours=1)
+        invitation.save(update_fields=["email_last_attempt_at", "updated_at"])
+
+        output = StringIO()
+        with patch("identity.invitations.send_mail", return_value=1):
+            management.call_command("retry_organization_invitations", stdout=output)
+        invitation.refresh_from_db()
+        self.assertIsNotNone(invitation.email_sent_at)
+        self.assertEqual(invitation.email_attempts, 2)
+        self.assertEqual(json.loads(output.getvalue())["delivered"], 1)
+
+
+@override_settings(
+    EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+    PROJECT_HOPE_PUBLIC_URL="https://hope.example.org",
+    PASSWORD_RESET_TIMEOUT=3600,
+)
+class PasswordResetApiTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(
+            "amina@example.org", "Original-Cedar-4827!", first_name="Amina"
+        )
+        self.api_token = Token.objects.create(user=self.user)
+
+    def reset_credentials(self):
+        reset_url = next(
+            line
+            for line in mail.outbox[-1].body.splitlines()
+            if line.startswith("https://")
+        )
+        return parse_qs(urlparse(reset_url).fragment)
+
+    def test_request_is_non_enumerating_and_sends_only_for_active_account(self):
+        known = APIClient().post(
+            "/api/v1/auth/password-reset/",
+            {"email": " AMINA@EXAMPLE.ORG "},
+            format="json",
+        )
+        unknown = APIClient().post(
+            "/api/v1/auth/password-reset/",
+            {"email": "unknown@example.org"},
+            format="json",
+        )
+
+        self.assertEqual(known.status_code, 202)
+        self.assertEqual(unknown.status_code, 202)
+        self.assertEqual(known.json(), unknown.json())
+        self.assertEqual(len(mail.outbox), 0)
+        delivery = PasswordResetDelivery.objects.get(user=self.user)
+        self.assertEqual(delivery.status, PasswordResetDelivery.Status.PENDING)
+        self.assertNotIn("reset", delivery.password_fingerprint)
+
+        management.call_command("retry_password_reset_deliveries", verbosity=0)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertNotIn("amina@example.org", known.json()["detail"].lower())
+        credentials = self.reset_credentials()
+        self.assertIn("reset_uid", credentials)
+        self.assertIn("reset_token", credentials)
+        self.assertTrue(
+            AuditEvent.objects.filter(
+                actor=self.user, action="password.reset_queued"
+            ).exists()
+        )
+
+    def test_valid_link_enforces_password_policy_and_is_single_use(self):
+        client = APIClient()
+        client.post(
+            "/api/v1/auth/password-reset/",
+            {"email": self.user.email},
+            format="json",
+        )
+        management.call_command("retry_password_reset_deliveries", verbosity=0)
+        credentials = self.reset_credentials()
+        payload = {
+            "uid": credentials["reset_uid"][0],
+            "token": credentials["reset_token"][0],
+        }
+        preview = client.post(
+            "/api/v1/auth/password-reset/inspect/", payload, format="json"
+        )
+        self.assertEqual(preview.status_code, 200, preview.content)
+        self.assertEqual(preview.json()["email"], self.user.email)
+
+        mismatch = client.post(
+            "/api/v1/auth/password-reset/confirm/",
+            {
+                **payload,
+                "password": "Cedar-River-9000!",
+                "password_confirm": "different",
+            },
+            format="json",
+        )
+        self.assertEqual(mismatch.status_code, 400)
+        weak = client.post(
+            "/api/v1/auth/password-reset/confirm/",
+            {**payload, "password": "password", "password_confirm": "password"},
+            format="json",
+        )
+        self.assertEqual(weak.status_code, 400)
+        changed = client.post(
+            "/api/v1/auth/password-reset/confirm/",
+            {
+                **payload,
+                "password": "Northern-Lights-9031!",
+                "password_confirm": "Northern-Lights-9031!",
+            },
+            format="json",
+        )
+        self.assertEqual(changed.status_code, 200, changed.content)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("Northern-Lights-9031!"))
+        self.assertFalse(Token.objects.filter(key=self.api_token.key).exists())
+        self.assertEqual(
+            client.post(
+                "/api/v1/auth/password-reset/confirm/",
+                {
+                    **payload,
+                    "password": "Another-Northern-9031!",
+                    "password_confirm": "Another-Northern-9031!",
+                },
+                format="json",
+            ).status_code,
+            400,
+        )
+        self.assertTrue(
+            AuditEvent.objects.filter(
+                actor=self.user, action="password.reset_completed"
+            ).exists()
+        )
+
+    def test_reset_delivery_retries_without_storing_the_reset_token(self):
+        APIClient().post(
+            "/api/v1/auth/password-reset/",
+            {"email": self.user.email},
+            format="json",
+        )
+        with (
+            patch(
+                "identity.passwords.send_mail",
+                side_effect=OSError("relay unavailable"),
+            ),
+            patch("identity.passwords.logger.exception") as logged_failure,
+        ):
+            management.call_command("retry_password_reset_deliveries", verbosity=0)
+        logged_failure.assert_called_once()
+        delivery = PasswordResetDelivery.objects.get(user=self.user)
+        self.assertEqual(delivery.status, PasswordResetDelivery.Status.PENDING)
+        self.assertEqual(delivery.email_attempts, 1)
+        with patch("identity.passwords.send_mail", return_value=1) as early_retry:
+            self.assertFalse(send_password_reset_delivery(delivery))
+        early_retry.assert_not_called()
+        delivery.refresh_from_db()
+        self.assertEqual(delivery.email_attempts, 1)
+        delivery.email_last_attempt_at = timezone.now() - timedelta(hours=1)
+        delivery.save(update_fields=["email_last_attempt_at", "updated_at"])
+
+        with patch("identity.passwords.send_mail", return_value=1):
+            management.call_command("retry_password_reset_deliveries", verbosity=0)
+        delivery.refresh_from_db()
+        self.assertEqual(delivery.status, PasswordResetDelivery.Status.SENT)
+        self.assertEqual(delivery.email_attempts, 2)
+
+
+@override_settings(
+    EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+    PROJECT_HOPE_PUBLIC_URL="https://hope.example.org",
+    PROJECT_HOPE_INVITATION_MAX_AGE_SECONDS=604800,
+)
+class BootstrapWorkspaceCommandTests(TestCase):
+    def test_bootstrap_is_idempotent_and_sends_first_owner_invitation(self):
+        output = StringIO()
+        management.call_command(
+            "bootstrap_workspace",
+            organization="North Star Centre",
+            owner_email="Owner@Example.org",
+            stdout=output,
+        )
+
+        organization = Organization.objects.get(slug="north-star-centre")
+        invitation = OrganizationInvitation.objects.get(organization=organization)
+        self.assertEqual(invitation.email, "owner@example.org")
+        self.assertEqual(invitation.role, Membership.Role.OWNER)
+        self.assertEqual(invitation.status, OrganizationInvitation.Status.PENDING)
+        self.assertIsNotNone(invitation.email_sent_at)
+        self.assertEqual(json.loads(output.getvalue())["delivery"], "sent")
+        self.assertNotIn("invite_token", output.getvalue())
+
+        second_output = StringIO()
+        management.call_command(
+            "bootstrap_workspace",
+            organization="North Star Centre",
+            owner_email="owner@example.org",
+            stdout=second_output,
+        )
+        self.assertEqual(Organization.objects.count(), 1)
+        self.assertEqual(OrganizationInvitation.objects.count(), 1)
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.token_version, 2)
+        self.assertEqual(len(mail.outbox), 2)
 
 
 class SeedCommandTests(TestCase):

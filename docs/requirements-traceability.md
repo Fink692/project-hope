@@ -1,19 +1,24 @@
 # Requirements traceability matrix
 
-| ID | Requirement | Design evidence | Current implementation/evidence | Status |
-|---|---|---|---|---|
-| R-01 | Self-hosted, local-first operation | Podman single-node topology; local Django auth; local PostgreSQL | `deploy/podman/compose.yml`, `services/core/project/settings.py` | Complete |
-| R-02 | Authentication | Custom email user, password hashing, session login/logout | `identity.User`, `/api/v1/auth/login/`, auth tests | Complete |
-| R-03 | Organizations and memberships | Organization + Membership models, owner assignment | `identity/models.py`, organization API | Complete |
-| R-04 | Role-based authorization | Owner/admin/coordinator/staff/viewer role policy | `identity/permissions.py`, API authorization tests | Complete |
-| R-05 | Tenant isolation | Organization membership is required before lookup; tenant FK is mandatory for audit events | organization and audit API tests | Complete |
-| R-06 | Audit foundation | Append-only event model, manager, login/org/membership events | `audit.models.AuditEvent`, audit API tests | Complete |
-| R-07 | Health checks | Unauthenticated liveness/readiness endpoint with database check | `/api/v1/healthz/`, health tests | Complete |
-| R-08 | Seed data | Idempotent management command with environment-controlled password | `seed_demo` command | Complete |
-| R-09 | Accessible web shell | Semantic landmarks, skip link, visible focus, status messaging, reduced motion | `apps/web/src/App.tsx`, `styles.css` | Complete |
-| R-10 | AI disabled mode | Core UI and APIs do not depend on model services | no AI dependency in Phase 1 | Complete |
-| R-11 | Replaceable AI gateway | Narrow deterministic operations, sidecar gateway, provenance and registry | `services/ai-gateway/main.py`, `services/core/modules/views.py`, gateway smoke tests | Complete |
-| R-12 | Human approval before consequences | Workflow/email/translation/accessibility review gates and audit events | `services/core/modules/models.py`, `services/core/modules/views.py`, module tests | Complete |
-| R-13 | Privacy/retention/deletion | Sensitivity fields, legal holds, preview/execute retention, tenant export and audit | `services/core/modules/management/commands`, `docs/privacy/data-handling.md` | Complete with operator restore/retention gates |
-| R-14 | Threat model | STRIDE/AI-specific threats, mitigations, residual risk | `docs/threat-models/foundation.md`, `docs/full-build-status.md` | Complete with deployment residuals |
-| R-15 | Automated verification | Backend/container tests, frontend/mobile checks, migration/check commands | `docs/full-build-status.md` | Complete |
+Status is evidence-based: **implemented** means tested code exists; **partial** means a baseline exists but an original exit condition remains open; **open** means the capability is absent or unproven.
+
+| ID | Requirement | Current evidence | Status / open gate |
+|---|---|---|---|
+| R-01 | Self-hosted baseline | Compose topology, Django/PostgreSQL, web and local Ollama services | Implemented baseline; production operator controls remain |
+| R-02 | Authentication | Email user, hashed passwords, session/token login, expiring invitations, one-time account recovery | Partial: OIDC/MFA is open |
+| R-03 | Organizations and memberships | Organization, Membership, bootstrap command, Team & access UI | Implemented; nontechnical-admin acceptance is open |
+| R-04 | Role-based authorization | Owner/admin/coordinator/staff/viewer policy and authorization tests | Implemented baseline; independent review is open |
+| R-05 | Tenant isolation | Organization membership required before scoped lookup; cross-tenant tests | Implemented baseline; broader BOLA/fuzz test is open |
+| R-06 | Audit foundation | Append-only event model and auth/org/member/invitation events | Implemented baseline; operational retention/export review is open |
+| R-07 | Health checks | Public core/database/AI readiness endpoint | Implemented |
+| R-08 | Safe first setup | Demo seed for training; production owner invitation command | Implemented; live SMTP/operator acceptance is open |
+| R-09 | Accessible web foundation | Landmarks, focus, reflow styles, reduced motion, axe tests | Partial: manual WCAG/user testing is open |
+| R-10 | Useful with AI disabled | Core organization and records paths do not require model output | Implemented baseline |
+| R-11 | Replaceable bounded AI gateway | Sidecar adapter, Ollama and deterministic paths, provenance | Partial: published evaluations and external runtimes are open |
+| R-12 | Human approval before consequences | Workflow, email, translation, accessibility review gates | Implemented baseline; field/adversarial acceptance remains open |
+| R-13 | Privacy, retention, deletion | Sensitivity, legal holds, retention command, export, audit | Partial: policy approval and restore evidence are open |
+| R-14 | Threat model | Foundation threat model and residual-risk documentation | Partial: independent security assessment is open |
+| R-15 | Automated verification | CI for backend/PostgreSQL/web/mobile/desktop/Compose and audits | Implemented for repository paths; external systems are not covered |
+| R-16 | Specialist module exit conditions | Domain models and bounded APIs across the named modules | Partial: see `full-build-status.md` for each unproven field gate |
+| R-17 | Managed service and payment | Pilot application and pricing copy | Open: hosting, billing, legal/service operations and customers |
+| R-18 | Software licensing | No license metadata or LICENSE file | Open: owner decision required |

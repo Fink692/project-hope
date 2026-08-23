@@ -31,7 +31,7 @@ describe("Project Hope web shell", () => {
     expect(screen.getByRole("heading", { name: "You should not need to be technical to get started." })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Install Project Hope like an app." })).toBeInTheDocument();
     expect(screen.getByRole("main")).toHaveAttribute("id", "main-content");
-    expect(await screen.findByRole("status")).toHaveTextContent("Ready for local work");
+    expect(await screen.findByRole("status")).toHaveTextContent("Ready for work");
   });
 
   it("has no automated WCAG A or AA violations on the public journey", async () => {
@@ -62,7 +62,7 @@ describe("Project Hope web shell", () => {
       if (path.endsWith("/auth/csrf/")) return Promise.resolve(new Response(JSON.stringify({ csrfTokenAvailable: true }), { status: 200 }));
       if (path.endsWith("/auth/login/")) {
         loggedIn = true;
-        return Promise.resolve(new Response(JSON.stringify({ token: "test-token" }), { status: 200 }));
+        return Promise.resolve(new Response(JSON.stringify({ user: { email: "demo@example.org", display_name: "Demo User" } }), { status: 200 }));
       }
       if (path.endsWith("/me/")) {
         return Promise.resolve(loggedIn
@@ -80,6 +80,7 @@ describe("Project Hope web shell", () => {
 
     render(<App />);
     await screen.findByRole("button", { name: "Sign in" });
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "demo@example.org" } });
     fireEvent.change(screen.getByLabelText("Password"), { target: { value: "password" } });
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
 
@@ -150,5 +151,206 @@ describe("Project Hope web shell", () => {
     expect(window.location.search).not.toContain("pilot_token");
     expect(window.location.hash).toBe("#founding-10");
     await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith("/pilot-applications/verify/"))).toBe(true));
+  });
+
+  it("strips private credentials from query strings without consuming them", async () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/?invite_token=query-invite&reset_uid=query-uid&reset_token=query-reset&pilot_token=query-pilot&utm_source=linkedin",
+    );
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path.endsWith("/healthz/")) return Promise.resolve(new Response(JSON.stringify({ status: "ok", database: "ok" }), { status: 200 }));
+      if (path.endsWith("/me/")) return Promise.resolve(new Response("{}", { status: 401 }));
+      return Promise.resolve(new Response("{}", { status: 200 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Ready for work");
+    expect(window.location.search).toBe("?utm_source=linkedin");
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        /invitations\/inspect|password-reset\/inspect|pilot-applications\/verify/.test(String(input)),
+      ),
+    ).toBe(false);
+  });
+
+  it("turns a private invitation into a signed-in team account", async () => {
+    window.history.replaceState({}, "", "/#invite_token=private-team-token");
+    let joined = false;
+    let acceptedPayload: Record<string, unknown> | undefined;
+    const session = { user: { email: "amina@example.org", display_name: "Amina Hope" }, organizations: [{ organization: { id: "org-1", name: "North Star Centre", slug: "north-star-centre", status: "active" }, role: "staff" }] };
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path.endsWith("/healthz/")) return Promise.resolve(new Response(JSON.stringify({ status: "ok", database: "ok" }), { status: 200 }));
+      if (path.endsWith("/invitations/inspect/") && init?.method === "POST") return Promise.resolve(new Response(JSON.stringify({ organization: { name: "North Star Centre" }, email: "amina@example.org", role: "staff", roleLabel: "Staff", expiresAt: "2026-08-30T12:00:00Z", existingAccount: false }), { status: 200 }));
+      if (path.endsWith("/invitations/accept/") && init?.method === "POST") {
+        acceptedPayload = JSON.parse(String(init.body));
+        joined = true;
+        return Promise.resolve(new Response(JSON.stringify({ detail: "You have joined North Star Centre.", signedIn: true, createdAccount: true, organization: session.organizations[0].organization, user: session.user }), { status: 200 }));
+      }
+      if (path.endsWith("/me/")) return Promise.resolve(joined ? new Response(JSON.stringify(session), { status: 200 }) : new Response("{}", { status: 401 }));
+      if (path.endsWith("/members/")) return Promise.resolve(new Response(JSON.stringify([{ id: "member-1", user: { id: "user-1", email: "amina@example.org", display_name: "Amina Hope" }, role: "staff", active: true }]), { status: 200 }));
+      return Promise.resolve(new Response("{}", { status: 200 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Join North Star Centre." })).toBeInTheDocument();
+    expect(window.location.hash).toBe("");
+    const invitationAccessibility = await axe.run(document.body, {
+      runOnly: {
+        type: "tag",
+        values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"],
+      },
+      rules: { "color-contrast": { enabled: false } },
+    });
+    expect(invitationAccessibility.violations.map(({ id }) => id)).toEqual([]);
+    fireEvent.change(screen.getByLabelText("First name"), { target: { value: "Amina" } });
+    fireEvent.change(screen.getByLabelText("Last name"), { target: { value: "Hope" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "Cedar-River-4827!" } });
+    fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value: "Cedar-River-4827!" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create account and join" }));
+
+    expect(await screen.findByRole("heading", { name: "Team & access" })).toBeInTheDocument();
+    expect(screen.getByText("You have joined North Star Centre.")).toBeInTheDocument();
+    expect(acceptedPayload).toMatchObject({ token: "private-team-token", first_name: "Amina", last_name: "Hope" });
+  });
+
+  it("lets an owner invite staff and manage roles without technical tools", async () => {
+    const organization = { id: "org-1", name: "Hope Demo", slug: "hope-demo", status: "active" };
+    const session = { user: { email: "owner@example.org", display_name: "Demo Owner" }, organizations: [{ organization, role: "owner" }] };
+    let invitations: unknown[] = [];
+    let roleUpdate: Record<string, unknown> | undefined;
+    let invitationPayload: Record<string, unknown> | undefined;
+    const members = [
+      { id: "owner-member", user: { id: "owner", email: "owner@example.org", display_name: "Demo Owner" }, role: "owner", active: true },
+      { id: "staff-member", user: { id: "staff", email: "amina@example.org", display_name: "Amina Hope" }, role: "staff", active: true },
+    ];
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path.endsWith("/healthz/")) return Promise.resolve(new Response(JSON.stringify({ status: "ok", database: "ok" }), { status: 200 }));
+      if (path.endsWith("/me/")) return Promise.resolve(new Response(JSON.stringify(session), { status: 200 }));
+      if (path.endsWith("/members/staff-member/") && init?.method === "PATCH") {
+        roleUpdate = JSON.parse(String(init.body));
+        members[1].role = String(roleUpdate?.role ?? members[1].role);
+        return Promise.resolve(new Response(JSON.stringify(members[1]), { status: 200 }));
+      }
+      if (path.endsWith("/members/")) return Promise.resolve(new Response(JSON.stringify(members), { status: 200 }));
+      if (path.endsWith("/invitations/") && init?.method === "POST") {
+        invitationPayload = JSON.parse(String(init.body));
+        const invitation = { id: "invite-1", email: invitationPayload?.email, role: invitationPayload?.role, status: "pending", effective_status: "pending", delivery_status: "sent", expires_at: "2026-08-30T12:00:00Z", email_sent_at: "2026-08-23T12:00:00Z" };
+        invitations = [invitation];
+        return Promise.resolve(new Response(JSON.stringify(invitation), { status: 201 }));
+      }
+      if (path.endsWith("/invitations/")) return Promise.resolve(new Response(JSON.stringify(invitations), { status: 200 }));
+      return Promise.resolve(new Response("{}", { status: 200 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    const teamButtons = await screen.findAllByRole("button", { name: "Team & access" });
+    fireEvent.click(teamButtons[0]);
+    await screen.findByRole("button", { name: "Send invitation" });
+    const teamAccessibility = await axe.run(document.body, {
+      runOnly: {
+        type: "tag",
+        values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"],
+      },
+      rules: { "color-contrast": { enabled: false } },
+    });
+    expect(teamAccessibility.violations.map(({ id }) => id)).toEqual([]);
+    fireEvent.change(screen.getByLabelText("Work email"), { target: { value: "new.staff@example.org" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send invitation" }));
+
+    expect(await screen.findByText("Invitation sent to new.staff@example.org.")).toBeInTheDocument();
+    expect(invitationPayload).toEqual({ email: "new.staff@example.org", role: "staff" });
+    fireEvent.change(screen.getByRole("combobox", { name: "Role for Amina Hope" }), { target: { value: "coordinator" } });
+    await waitFor(() => expect(roleUpdate).toEqual({ role: "coordinator" }));
+  });
+
+  it("shows owner access as protected when an administrator reviews the team", async () => {
+    const organization = { id: "org-1", name: "Hope Demo", slug: "hope-demo", status: "active" };
+    const session = { user: { email: "admin@example.org", display_name: "Demo Administrator" }, organizations: [{ organization, role: "admin" }] };
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path.endsWith("/healthz/")) return Promise.resolve(new Response(JSON.stringify({ status: "ok", database: "ok" }), { status: 200 }));
+      if (path.endsWith("/me/")) return Promise.resolve(new Response(JSON.stringify(session), { status: 200 }));
+      if (path.endsWith("/members/")) return Promise.resolve(new Response(JSON.stringify([
+        { id: "owner-member", user: { id: "owner", email: "owner@example.org", display_name: "Founding Owner" }, role: "owner", active: true },
+        { id: "admin-member", user: { id: "admin", email: "admin@example.org", display_name: "Demo Administrator" }, role: "admin", active: true },
+      ]), { status: 200 }));
+      if (path.endsWith("/invitations/")) return Promise.resolve(new Response(JSON.stringify([
+        { id: "owner-invite", email: "second.owner@example.org", role: "owner", status: "pending", effective_status: "pending", delivery_status: "sent", expires_at: "2026-08-30T12:00:00Z", email_sent_at: "2026-08-23T12:00:00Z" },
+      ]), { status: 200 }));
+      return Promise.resolve(new Response("{}", { status: 200 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    const teamButtons = await screen.findAllByRole("button", { name: "Team & access" });
+    fireEvent.click(teamButtons[0]);
+
+    const ownerRole = await screen.findByRole("combobox", { name: "Role for Founding Owner" });
+    expect(ownerRole).toBeDisabled();
+    expect(ownerRole).toHaveValue("owner");
+    expect(screen.queryByRole("button", { name: "Resend" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Revoke" })).not.toBeInTheDocument();
+  });
+
+  it("requests account recovery without revealing whether an account exists", async () => {
+    let resetPayload: Record<string, unknown> | undefined;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path.endsWith("/healthz/")) return Promise.resolve(new Response(JSON.stringify({ status: "ok", database: "ok" }), { status: 200 }));
+      if (path.endsWith("/me/")) return Promise.resolve(new Response("{}", { status: 401 }));
+      if (path.endsWith("/auth/password-reset/") && init?.method === "POST") {
+        resetPayload = JSON.parse(String(init.body));
+        return Promise.resolve(new Response(JSON.stringify({ detail: "If an active account matches that email, private reset instructions will arrive shortly." }), { status: 202 }));
+      }
+      return Promise.resolve(new Response("{}", { status: 200 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Forgot password?" }));
+    expect(await screen.findByRole("heading", { name: "Reset your password." })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Account email"), { target: { value: "amina@example.org" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send reset link" }));
+
+    expect(await screen.findByRole("heading", { name: "Check your inbox." })).toBeInTheDocument();
+    expect(resetPayload).toEqual({ email: "amina@example.org" });
+    expect(screen.getByText(/For privacy, the response is the same/i)).toBeInTheDocument();
+  });
+
+  it("uses a private reset fragment once and returns to sign in", async () => {
+    window.history.replaceState({}, "", "/#reset_uid=private-uid&reset_token=private-reset-token");
+    let confirmPayload: Record<string, unknown> | undefined;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path.endsWith("/healthz/")) return Promise.resolve(new Response(JSON.stringify({ status: "ok", database: "ok" }), { status: 200 }));
+      if (path.endsWith("/me/")) return Promise.resolve(new Response("{}", { status: 401 }));
+      if (path.endsWith("/auth/password-reset/inspect/") && init?.method === "POST") return Promise.resolve(new Response(JSON.stringify({ valid: true, email: "amina@example.org" }), { status: 200 }));
+      if (path.endsWith("/auth/password-reset/confirm/") && init?.method === "POST") {
+        confirmPayload = JSON.parse(String(init.body));
+        return Promise.resolve(new Response(JSON.stringify({ detail: "Your password has been changed. Sign in with the new password.", email: "amina@example.org" }), { status: 200 }));
+      }
+      return Promise.resolve(new Response("{}", { status: 200 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Choose a new password." })).toBeInTheDocument();
+    expect(window.location.hash).toBe("");
+    fireEvent.change(screen.getByLabelText("New password"), { target: { value: "Northern-Lights-9031!" } });
+    fireEvent.change(screen.getByLabelText("Confirm new password"), { target: { value: "Northern-Lights-9031!" } });
+    fireEvent.click(screen.getByRole("button", { name: "Change password" }));
+
+    expect(await screen.findByText("Your password has been changed. Sign in with the new password.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Email")).toHaveValue("amina@example.org");
+    expect(confirmPayload).toMatchObject({ uid: "private-uid", token: "private-reset-token" });
   });
 });

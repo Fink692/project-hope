@@ -1,46 +1,50 @@
-# LinkedIn release post — Project Hope 1.5
+# LinkedIn release post — Project Hope 1.6
 
 ---
 
-I’m incredibly proud to finally release Project Hope 1.5. 🌱
+I’m proud to finally release Project Hope 1.6. 🌱
 
-This has been a long build—not a weekend prototype, and not another AI demo looking for a problem.
+This moment has been a long time coming.
 
-Project Hope is a real, installable operations platform designed for charities: one calm place for contacts, volunteers, schedules, documents, grants, communications, impact reporting, accessibility tools, and carefully bounded AI.
+Project Hope did not begin as a weekend prototype or an AI demo looking for a problem. I built it around a straightforward belief: charities deserve capable software that feels calm, understandable, and ready for real work—even when they do not have an IT team.
 
-The idea was simple, even if the work was not:
+Project Hope brings contacts, volunteers, schedules, documents, grants, communications, impact work, accessibility tools, and carefully bounded AI into one connected workspace.
 
-Charities should not need a technical team—or a maze of disconnected subscriptions—to use capable software.
+Version 1.6 makes the first day feel like a real product:
 
-So Project Hope now ships with:
+- ✅ A setup partner can create a charity workspace and securely invite its first owner
+- ✅ Owners can invite teammates, choose roles, review access, resend links, and revoke invitations inside the app
+- ✅ New teammates create their account from one private, expiring link
+- ✅ Existing users join without changing their password
+- ✅ Privacy-preserving account recovery is built in
+- ✅ Browser sessions, native app tokens, login throttles, and production database settings are hardened
+- ✅ Windows, macOS, and Linux installers connect staff to the same hosted workspace
+- ✅ The web and mobile experiences are connected by design—no stray local record copies to reconcile
+- ✅ AI remains optional, bounded, and subject to human review
 
-- ✅ Windows, macOS, and Linux installers
-- ✅ One connected workspace, with web, desktop, and build-ready iPhone/Android clients
-- ✅ Charity-controlled data, roles, permissions, and audit history
-- ✅ Local AI for reviewable drafting, translation, search, and evidence workflows
-- ✅ A useful core that still works when AI is switched off
-- ✅ A free self-hosted edition with no required paid AI API
+The release passed 48 backend tests, 11 web journeys with automated accessibility checks, 7 AI-gateway tests, a live local-model smoke suite, production builds across every client, dependency audits, and production configuration checks.
 
-Today I’m also opening applications for the Founding 10: ten charities that want to help shape the next chapter and receive a managed launch, onboarding, updates, backups, and hands-on support.
+I’m also looking for the Founding 10: ten charities willing to test Project Hope honestly and help shape what comes next. The managed Founding Partner pilot is CAD $149/month after a workspace is live. There is no application fee, no card collected to apply, and no payment obligation until scope and responsibilities are agreed in writing.
 
-The Founding Partner pilot is CAD $149/month after the workspace is live. There is no fee to apply, no card at the application stage, and the free self-hosted edition is staying free.
+If you work with a charity—or know someone who does—I would be grateful if you shared this.
 
-If you work with a charity—or know someone who does—I would be grateful if you shared this with them.
+To ask about a Founding 10 place, send me a private LinkedIn message with “FOUNDING 10” and your charity’s name. Please do not post personal, client, donor, volunteer, or service-user information in the comments.
 
-To ask about one of the Founding 10 places, send me a private LinkedIn message with “FOUNDING 10” and your charity’s name. I’ll reply privately with the next steps. Please don’t post personal, client, or service-user information in the comments.
+Release notes and desktop installers:
+https://github.com/Fink692/project-hope/releases/tag/v1.6.0
 
-Explore the open project, release notes, and installers: https://github.com/Fink692/project-hope/releases/tag/v1.5.0
+After a long time building quietly, it feels deeply meaningful to put this into the world. Project Hope is ready for its first real charity partners—and I’m proud of the care that went into getting it here.
 
-After a long time building quietly, it feels good to put Project Hope into the hands of the people it was made for. This release means a lot to me.
-
-#CharityTech #NonprofitTechnology #SocialImpact #OpenSource #ResponsibleAI
+#CharityTech #NonprofitTechnology #SocialImpact #ResponsibleAI #SaaS #TechForGood
 
 ---
 
 Suggested first comment:
 
-> What I care about most is making the first experience easy. A charity should be able to install the app, sign in, and get useful work done without learning infrastructure. If your organization would be willing to test that promise honestly, send me a private message with “FOUNDING 10” and your charity’s name. Release: https://github.com/Fink692/project-hope/releases/tag/v1.5.0
+> The part I care about most is the first experience. A charity should be able to receive an invitation, create an account, install the app, and start useful work without learning infrastructure. If your organization would test that promise honestly, send me “FOUNDING 10” and your charity’s name. Release: https://github.com/Fink692/project-hope/releases/tag/v1.6.0
+
+Suggested image: `docs/assets/team-access-live-v1.6.png`
 
 Suggested image alt text:
 
-> Project Hope web app showing the Founding 10 managed-pilot offer and an accessible two-minute application form beside the product’s healthy local service status.
+> Project Hope’s Team and access workspace showing one charity owner, a secure invitation form, role controls, and a pending coordinator invitation.

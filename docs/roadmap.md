@@ -1,47 +1,29 @@
-# Phased implementation roadmap
+# Evidence-gated product roadmap
 
-The roadmap is milestone-gated. All planned product phases below now have a functional, self-hosted, release-hardened implementation in this repository. Optional model, OCR, telephony, identity-federation, and publishing runtimes remain operator integrations because their credentials, hardware, and policy choices belong to each charity.
+Project Hope has an implemented foundation and broad module baselines. The roadmap is not “complete” merely because models and endpoints exist. A phase closes only when its original acceptance condition has dated evidence from the people or systems named below.
 
-## Completion status
+## Track A — dependable workspace
 
-Phases 1–10 are implemented in the current product. The authoritative module-by-module evidence is in [full-build-status.md](full-build-status.md). Consequential operations remain bounded, audited, reviewable, or disabled until an operator explicitly enables the relevant integration.
+1. **Identity and team onboarding — code complete, production gate open.** Secure invitations, account recovery, and role management are implemented. Close after OIDC/MFA or an approved MFA gateway, independent authorization review, and a nontechnical charity administrator completes setup unaided.
+2. **CRM migration — baseline implemented.** Close when a charity can import, correct, deduplicate, and export a representative spreadsheet without loss.
+3. **Volunteer and scheduling — baseline implemented.** Close after a real recruitment-to-shift workflow, including reminders/cancellations/attendance, passes acceptance.
+4. **Documents — baseline implemented.** Close after malware/OCR integrations and a permission-aware corpus proves exact-location retrieval.
 
-## Phase 1 — Foundation (complete)
+## Track B — bounded assistance
 
-Repository, local stack, backend/frontend product shell, local authentication, organizations, memberships, roles, tenant isolation, audit events, health checks, seed data, tests, and exact setup documentation.
+5. **AI and email — baseline implemented.** Close after task evaluations, adversarial-email tests, and production mail integration show useful drafts without unauthorized effects.
+6. **Analytics and grants — baseline implemented.** Close after metric ownership/reproducibility and sourced-versus-unsupported grant drafting are accepted by real users.
+7. **Resources, translation, accessibility — baseline implemented.** Close after freshness ownership, bilingual/RTL review, manual WCAG audit, and disability-led testing.
 
-## Phase 2 — CRM core (complete)
+## Track C — controlled expansion
 
-Contacts, households, organizations, relationships, consent, interactions, configurable tags, import/export, duplicate review, sensitivity labels, and audit coverage.
+8. **Device clients — buildable baseline.** Close after signed/notarized desktop and mobile distribution, device/accessibility testing, and remote session administration.
+9. **Voice and donor insights — bounded prototypes only.** Close only after telephony safety tests and independent donor ethics/privacy review. Until then, no production automation claim.
+10. **Plugins and public API — governance baseline.** Close after signed artefacts, runtime sandboxing, malicious-plugin tests, OAuth/OIDC, signed webhooks, idempotency, and BOLA/schema fuzzing.
 
-## Phase 3 — Volunteer and scheduling core (complete)
+## Track D — managed product
 
-Volunteer applications, onboarding, skills, availability, shifts, appointments, recurrence, reminders, attendance, waivers, and accessible exports.
+11. **Commercial operations — open.** Deploy a managed production environment, choose the legal/software license, publish service terms/privacy providers, add billing and support operations, and complete backup/restore and incident drills.
+12. **Founding 10 — 0/10 verified at the latest evidence check.** Acquire ten legitimate, email-verified charity applicants and distinguish applicants, qualified pilots, active pilots, converted/paying customers, and test fixtures. Only real external organizations count.
 
-## Phase 4 — Document platform (complete)
-
-Secure uploads with size, MIME, magic-byte, archive traversal, archive member, and decompression-ratio checks; deterministic extraction; permission-aware passages; indexing; citations; and audited deletion/retention workflows. Optional malware/OCR/Tika sidecars remain isolated integrations.
-
-## Phase 5 — AI gateway and email drafting (complete)
-
-Local model registry, bounded operations, permission-aware retrieval, structured validators, prompt-injection tests, IMAP ingestion, cited drafts, and explicit send approval.
-
-## Phase 6 — Analytics and grant workspace (complete)
-
-Owned metric definitions, tested reporting views, accessible dashboards, grant evidence, citations, budget arithmetic, versioning, and named approval.
-
-## Phase 7 — Resource directory, translation, and accessibility transformations (complete)
-
-Open Referral-compatible resources, verification/freshness, geospatial search, segment translation, glossary, plain-language and audio transformations, bilingual and disability-led validation.
-
-## Phase 8 — PWA and offline workflows (complete)
-
-Bounded secure-storage snapshots with expiry, volunteer field surfaces, remote sign-out, offline notes, and low-bandwidth behavior.
-
-## Phase 9 — Voice and donor-insights pilots (complete bounded implementation)
-
-Only after safety review: browser/internal voice with human escalation and descriptive donor cohorts. No emergency counselling, vulnerability scoring, wealth estimation, or automated differential treatment.
-
-## Phase 10 — Private plugin catalogue and native mobile (complete governance/client implementation)
-
-Signed manifests, capability tokens, sandboxed execution, revocation, incident drills, and only then native mobile distribution. A public marketplace is last.
+The authoritative implementation and remaining gates are in [full-build-status.md](full-build-status.md).

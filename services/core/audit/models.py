@@ -1,8 +1,28 @@
 import uuid
+from ipaddress import ip_address
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+
+
+def request_ip_address(request):
+    remote_address = request.META.get("REMOTE_ADDR", "")
+    forwarded = [
+        value.strip()
+        for value in request.META.get("HTTP_X_FORWARDED_FOR", "").split(",")
+        if value.strip()
+    ]
+    proxy_count = int(settings.REST_FRAMEWORK.get("NUM_PROXIES", 0))
+    candidate = (
+        forwarded[-proxy_count]
+        if proxy_count > 0 and len(forwarded) >= proxy_count
+        else remote_address
+    )
+    try:
+        return str(ip_address(candidate))
+    except ValueError:
+        return None
 
 
 class AuditEventManager(models.Manager):
@@ -20,10 +40,8 @@ class AuditEventManager(models.Manager):
     ):
         request_meta = {}
         if request is not None:
-            forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
             request_meta = {
-                "ip_address": forwarded_for.split(",")[0].strip()
-                or request.META.get("REMOTE_ADDR"),
+                "ip_address": request_ip_address(request),
                 "user_agent": request.META.get("HTTP_USER_AGENT", "")[:512],
             }
         return self.create(

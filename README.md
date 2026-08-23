@@ -12,9 +12,15 @@ It works like a normal app: staff install it, sign in, and get to work. The desk
 
 ![Project Hope Founding 10 application and managed pilot offer](docs/assets/founding-10.png)
 
+### Secure onboarding that feels like a normal app
+
+| Private team invitation | Owner-managed team access |
+|---|---|
+| ![Project Hope secure team invitation](docs/assets/team-invitation-live-v1.6.png) | ![Project Hope Team and access workspace](docs/assets/team-access-live-v1.6.png) |
+
 ## Founding 10 managed pilot
 
-Project Hope's self-hosted Community edition remains free. The Founding 10 programme is for charities that want someone else to handle the technical launch and ongoing maintenance.
+Project Hope's source is publicly visible, but this repository does not yet include an approved software license, so reuse rights must not be assumed. The intended self-hosted Community offering is zero-cost once the copyright owner approves its licensing terms. The Founding 10 programme is for charities that want someone else to handle the technical launch and ongoing maintenance.
 
 - **Founding Partner pilot:** CAD $149/month after the workspace is live
 - **Included:** managed launch, first-admin onboarding, updates, encrypted backups, and human support
@@ -67,6 +73,8 @@ The platform remains useful with AI disabled. AI features use bounded, replaceab
 ## Built for trust
 
 - Organization-scoped access, roles, permissions, audit history, and legal holds
+- Secure team onboarding with expiring one-time invitations, in-app role management, resend/revoke controls, and delivery retries
+- Privacy-safe account recovery with one-hour single-use links and token/session invalidation
 - Charity-controlled data with replaceable self-hosted infrastructure
 - Human approval before consequential actions
 - Accessible keyboard-first interfaces with reduced-motion support
@@ -80,7 +88,7 @@ The setup partner owns the one-time technical launch:
 
 - deploy the production Compose stack;
 - connect the organization’s domain and HTTPS;
-- configure identity, MFA, email, secrets, backups, and monitoring;
+- configure an approved MFA access gateway until native OIDC/MFA lands, plus email, secrets, backups, and monitoring;
 - create the organization’s mobile build/signing configuration;
 - run a synthetic-data staging test;
 - build a preconfigured desktop installer.

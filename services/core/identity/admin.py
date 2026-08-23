@@ -1,7 +1,14 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 
-from .models import Membership, Organization, PilotApplication, User
+from .models import (
+    Membership,
+    Organization,
+    OrganizationInvitation,
+    PasswordResetDelivery,
+    PilotApplication,
+    User,
+)
 
 
 @admin.register(User)
@@ -49,6 +56,61 @@ class MembershipAdmin(admin.ModelAdmin):
     list_display = ("organization", "user", "role", "active", "created_at")
     search_fields = ("organization__name", "user__email")
     list_filter = ("role", "active")
+
+
+@admin.register(OrganizationInvitation)
+class OrganizationInvitationAdmin(admin.ModelAdmin):
+    list_display = (
+        "email",
+        "organization",
+        "role",
+        "status",
+        "expires_at",
+        "email_sent_at",
+        "created_at",
+    )
+    list_filter = ("status", "role")
+    search_fields = ("email", "organization__name")
+    readonly_fields = (
+        "id",
+        "token_version",
+        "email_sent_at",
+        "email_last_attempt_at",
+        "email_attempts",
+        "accepted_at",
+        "revoked_at",
+        "created_at",
+        "updated_at",
+    )
+
+
+@admin.register(PasswordResetDelivery)
+class PasswordResetDeliveryAdmin(admin.ModelAdmin):
+    list_display = (
+        "user",
+        "status",
+        "email_attempts",
+        "email_sent_at",
+        "expires_at",
+        "created_at",
+    )
+    list_filter = ("status",)
+    search_fields = ("user__email",)
+    exclude = ("password_fingerprint",)
+    readonly_fields = (
+        "id",
+        "user",
+        "status",
+        "expires_at",
+        "email_sent_at",
+        "email_last_attempt_at",
+        "email_attempts",
+        "created_at",
+        "updated_at",
+    )
+
+    def has_add_permission(self, request):
+        return False
 
 
 @admin.register(PilotApplication)

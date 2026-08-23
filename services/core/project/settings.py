@@ -1,6 +1,6 @@
 from pathlib import Path
 import os
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, unquote, urlparse
 
 from django.core.exceptions import ImproperlyConfigured
 
@@ -78,18 +78,23 @@ if database_url.startswith(("postgres://", "postgresql://")):
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.postgresql",
-            "NAME": parsed_database.path.removeprefix("/"),
-            "USER": parsed_database.username or "hope",
-            "PASSWORD": parsed_database.password or "",
+            "NAME": unquote(parsed_database.path.removeprefix("/")),
+            "USER": unquote(parsed_database.username or "hope"),
+            "PASSWORD": unquote(parsed_database.password or ""),
             "HOST": parsed_database.hostname or "localhost",
             "PORT": str(parsed_database.port or 5432),
+            "OPTIONS": dict(parse_qsl(parsed_database.query, keep_blank_values=True)),
         }
     }
+elif ENVIRONMENT == "production":
+    raise ImproperlyConfigured("DATABASE_URL must be a PostgreSQL URL in production.")
 else:
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
-            "NAME": str(BASE_DIR / "db.sqlite3"),
+            "NAME": os.environ.get(
+                "PROJECT_HOPE_SQLITE_PATH", str(BASE_DIR / "db.sqlite3")
+            ),
         }
     }
 
@@ -115,7 +120,7 @@ AUTH_USER_MODEL = "identity.User"
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.TokenAuthentication",
+        "identity.authentication.ExpiringTokenAuthentication",
         "rest_framework.authentication.SessionAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
@@ -133,11 +138,28 @@ REST_FRAMEWORK = {
         "rest_framework.throttling.AnonRateThrottle",
         "rest_framework.throttling.UserRateThrottle",
     ],
+    # Zero means direct connections use REMOTE_ADDR. Production Compose has one
+    # trusted reverse proxy (Caddy); operators with another trusted proxy/CDN must
+    # set the exact total instead of trusting arbitrary forwarded headers.
+    "NUM_PROXIES": int(
+        os.environ.get("DRF_NUM_PROXIES", "1" if ENVIRONMENT == "production" else "0")
+    ),
     "DEFAULT_THROTTLE_RATES": {
         "anon": os.environ.get("DRF_ANON_RATE", "60/minute"),
         "user": os.environ.get("DRF_USER_RATE", "600/minute"),
         "pilot_application": os.environ.get("DRF_PILOT_APPLICATION_RATE", "10/hour"),
         "pilot_verification": os.environ.get("DRF_PILOT_VERIFICATION_RATE", "30/hour"),
+        "invitation_public": os.environ.get("DRF_INVITATION_PUBLIC_RATE", "30/hour"),
+        "password_reset_request": os.environ.get(
+            "DRF_PASSWORD_RESET_REQUEST_RATE", "5/hour"
+        ),
+        "password_reset_token": os.environ.get(
+            "DRF_PASSWORD_RESET_TOKEN_RATE", "30/hour"
+        ),
+        "auth_login_account": os.environ.get(
+            "DRF_AUTH_LOGIN_ACCOUNT_RATE", "10/minute"
+        ),
+        "auth_login_ip": os.environ.get("DRF_AUTH_LOGIN_IP_RATE", "60/minute"),
     },
 }
 
@@ -223,6 +245,31 @@ PROJECT_HOPE_PILOT_EMAIL_RETRY_SECONDS = int(
 )
 PROJECT_HOPE_PILOT_EMAIL_RETRY_BATCH_SIZE = int(
     os.environ.get("PROJECT_HOPE_PILOT_EMAIL_RETRY_BATCH_SIZE", "20")
+)
+PROJECT_HOPE_INVITATION_MAX_AGE_SECONDS = int(
+    os.environ.get("PROJECT_HOPE_INVITATION_MAX_AGE_SECONDS", "604800")
+)
+PROJECT_HOPE_INVITATION_EMAIL_RETRY_SECONDS = int(
+    os.environ.get("PROJECT_HOPE_INVITATION_EMAIL_RETRY_SECONDS", "900")
+)
+PROJECT_HOPE_INVITATION_EMAIL_RETRY_BATCH_SIZE = int(
+    os.environ.get("PROJECT_HOPE_INVITATION_EMAIL_RETRY_BATCH_SIZE", "20")
+)
+PASSWORD_RESET_TIMEOUT = int(os.environ.get("PASSWORD_RESET_TIMEOUT", "3600"))
+PROJECT_HOPE_API_TOKEN_MAX_AGE_SECONDS = int(
+    os.environ.get("PROJECT_HOPE_API_TOKEN_MAX_AGE_SECONDS", "2592000")
+)
+PROJECT_HOPE_PASSWORD_RESET_QUEUE_MAX_AGE_SECONDS = int(
+    os.environ.get("PROJECT_HOPE_PASSWORD_RESET_QUEUE_MAX_AGE_SECONDS", "900")
+)
+PROJECT_HOPE_PASSWORD_RESET_EMAIL_RETRY_SECONDS = int(
+    os.environ.get("PROJECT_HOPE_PASSWORD_RESET_EMAIL_RETRY_SECONDS", "120")
+)
+PROJECT_HOPE_PASSWORD_RESET_EMAIL_RETRY_BATCH_SIZE = int(
+    os.environ.get("PROJECT_HOPE_PASSWORD_RESET_EMAIL_RETRY_BATCH_SIZE", "20")
+)
+PROJECT_HOPE_PASSWORD_RESET_DELIVERY_RETENTION_DAYS = int(
+    os.environ.get("PROJECT_HOPE_PASSWORD_RESET_DELIVERY_RETENTION_DAYS", "7")
 )
 PROJECT_HOPE_PILOT_UNVERIFIED_RETENTION_DAYS = int(
     os.environ.get("PROJECT_HOPE_PILOT_UNVERIFIED_RETENTION_DAYS", "14")
