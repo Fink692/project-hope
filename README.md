@@ -179,7 +179,7 @@ GitHub Actions also verifies the backend, web client, mobile client, desktop pac
 
 ## Release status
 
-The current public release is [Project Hope 1.5.0](https://github.com/Fink692/project-hope/releases/tag/v1.5.0), with native desktop installers, the local AI runtime, and the Founding 10 acquisition workflow. The [full build status](docs/full-build-status.md) records the implemented product surface and the remaining organization-owned launch requirements.
+The current public release is [Project Hope 1.6.0](https://github.com/Fink692/project-hope/releases/tag/v1.6.0), with secure team onboarding, account recovery, native desktop installers, the local AI runtime, and the Founding 10 acquisition workflow. The [full build status](docs/full-build-status.md) records the implemented product surface and the remaining organization-owned launch requirements.
 
 ## Principles
 
