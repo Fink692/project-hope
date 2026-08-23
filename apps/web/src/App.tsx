@@ -1,5 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
+import CRMPanel from "./CRMPanel";
+
 type Health = {
   status: "ok" | "degraded" | "unknown";
   database: "ok" | "unavailable" | "unknown";
@@ -184,7 +186,7 @@ function readCookie(name: string) {
 
 async function request(path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
-  if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  if (init.body && !(init.body instanceof FormData) && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
   const csrf = readCookie("csrftoken");
   if (csrf) headers.set("X-CSRFToken", csrf);
   const response = await fetch(path, { ...init, headers, credentials: "include" });
@@ -483,7 +485,7 @@ function App() {
                 {currentOrganization && !session.mfa?.enrollmentRequired && <button aria-current={activeModule === "overview" ? "page" : undefined} className={activeModule === "overview" ? "selected" : ""} type="button" onClick={() => setActiveModule("overview")}>Workspace overview</button>}
                 {modules.filter((module) => currentOrganization ? !session.mfa?.enrollmentRequired || module.id === "security" : module.id === "security").map((module) => <button aria-current={activeModule === module.id ? "page" : undefined} className={activeModule === module.id ? "selected" : ""} type="button" key={module.id} onClick={() => setActiveModule(module.id)}>{module.label}</button>)}
               </nav>
-              <div className="module-content">{activeModule === "security" || session.mfa?.enrollmentRequired || !currentOrganization ? <SecurityPanel mfa={session.mfa} onChanged={securityChanged} /> : activeModule === "overview" ? <WorkspaceOverview onOpen={(id) => setActiveModule(id)} /> : activeModule === "team" ? <TeamPanel organization={currentOrganization} role={currentRole} /> : selectedModule ? <ModulePanel module={selectedModule} organization={currentOrganization} /> : null}</div>
+              <div className="module-content">{activeModule === "security" || session.mfa?.enrollmentRequired || !currentOrganization ? <SecurityPanel mfa={session.mfa} onChanged={securityChanged} /> : activeModule === "overview" ? <WorkspaceOverview onOpen={(id) => setActiveModule(id)} /> : activeModule === "team" ? <TeamPanel organization={currentOrganization} role={currentRole} /> : activeModule === "crm" ? <CRMPanel organization={currentOrganization} role={currentRole} /> : selectedModule ? <ModulePanel module={selectedModule} organization={currentOrganization} role={currentRole} /> : null}</div>
             </div>
           </section>
         )}
@@ -1205,7 +1207,7 @@ function WorkspaceOverview({ onOpen }: { onOpen: (id: string) => void }) {
   return <div><p className="eyebrow">Your operating surface</p><h3 className="module-title">Choose a module to begin.</h3><p className="module-lede">Everything here stays inside the organization boundary. Start with structured records; add AI only when a reviewable workflow helps.</p><div className="module-grid">{modules.map((module) => <button type="button" className={`module-card ${module.color}`} key={module.id} onClick={() => onOpen(module.id)}><span>{module.label}</span><small>{module.description}</small><b aria-hidden="true">↗</b></button>)}</div></div>;
 }
 
-function ModulePanel({ module, organization }: { module: ModuleDefinition; organization: Organization }) {
+function ModulePanel({ module, organization, role }: { module: ModuleDefinition; organization: Organization; role: string }) {
   const [data, setData] = useState<unknown>(null);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
@@ -1213,6 +1215,7 @@ function ModulePanel({ module, organization }: { module: ModuleDefinition; organ
   const [showCreate, setShowCreate] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const fields = moduleForms[module.id] ?? [];
+  const canEdit = ["owner", "admin", "coordinator", "staff"].includes(role);
 
   async function load(nextQuery = submittedQuery) {
     setData(null);
@@ -1245,9 +1248,10 @@ function ModulePanel({ module, organization }: { module: ModuleDefinition; organ
         <label className="search-field"><span className="sr-only">Search {module.label}</span><input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void load(query.trim()); }} placeholder={"Search " + module.label.toLowerCase()} type="search" /></label>
         <button className="button secondary compact" type="button" onClick={() => void load(query.trim())}>Search</button>
         <button className="button secondary compact" type="button" disabled={isRefreshing} onClick={() => void refresh()}>{isRefreshing ? "Refreshing…" : "Refresh"}</button>
-        {fields.length > 0 && <button className="button primary compact" type="button" onClick={() => setShowCreate((value) => !value)}>{showCreate ? "Close form" : "New record"}</button>}
+        {fields.length > 0 && canEdit && <button className="button primary compact" type="button" onClick={() => setShowCreate((value) => !value)}>{showCreate ? "Close form" : "New record"}</button>}
       </div>
-      {showCreate && fields.length > 0 && <CreateRecordForm fields={fields} endpoint={module.endpoint} organization={organization} onCreated={() => { setShowCreate(false); void load(); }} />}
+      {!canEdit && fields.length > 0 && <p className="permission-note">You have view-only access. A team member with editing access can change these records.</p>}
+      {showCreate && fields.length > 0 && canEdit && <CreateRecordForm fields={fields} endpoint={module.endpoint} organization={organization} onCreated={() => { setShowCreate(false); void load(); }} />}
       {error ? <div className="empty-state error-state" role="alert"><strong>Could not load this module.</strong><p>{error}</p><button className="button secondary compact" type="button" onClick={() => void load()}>Try again</button><small>Confirm your membership and local API health status.</small></div> : data === null ? <p className="loading-state" role="status">Loading {module.label}…</p> : items.length === 0 ? <div className="empty-state"><strong>{submittedQuery ? "No matching records." : "No records yet."}</strong><p>{submittedQuery ? "Try a different search term." : "This module is ready for its first organization-controlled record."}</p></div> : <div className="record-list">{items.slice(0, 100).map((item, index) => <article key={recordKey(item, index)}><strong>{recordTitle(item, index)}</strong><small>{recordSummary(item)}</small></article>)}</div>}
     </div>
   );

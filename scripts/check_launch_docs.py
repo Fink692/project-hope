@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import json
 from pathlib import Path
 from urllib.parse import unquote
 
@@ -38,10 +39,16 @@ def validate_post() -> int:
         )
     if "**" in post:
         raise SystemExit("LinkedIn post body contains Markdown bold markers")
-    if "https://github.com/Fink692/project-hope/releases/tag/v1.7.0" not in post:
-        raise SystemExit("LinkedIn post does not point to the v1.7.0 release")
+    version = json.loads(
+        (ROOT / "apps" / "web" / "package.json").read_text(encoding="utf-8")
+    )["version"]
+    release_url = f"https://github.com/Fink692/project-hope/releases/tag/v{version}"
+    if release_url not in post:
+        raise SystemExit(f"LinkedIn post does not point to the v{version} release")
     if "FOUNDING 10" not in post:
-        raise SystemExit("LinkedIn post is missing the private Founding 10 call to action")
+        raise SystemExit(
+            "LinkedIn post is missing the private Founding 10 call to action"
+        )
     return length
 
 
@@ -64,4 +71,6 @@ def validate_local_links() -> None:
 if __name__ == "__main__":
     post_length = validate_post()
     validate_local_links()
-    print(f"Launch documentation checks passed ({post_length}-character LinkedIn post).")
+    print(
+        f"Launch documentation checks passed ({post_length}-character LinkedIn post)."
+    )

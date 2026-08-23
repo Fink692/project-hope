@@ -23,4 +23,5 @@ apps/desktop/.builder-cache/
 coverage/
 artifacts/
 .tmp/
+tmp/
 .DS_Store

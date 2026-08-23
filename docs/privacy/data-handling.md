@@ -6,6 +6,8 @@ The platform can store identity and membership data, encrypted authenticator sec
 
 The public Founding 10 form is a separate acquisition purpose. Its fields, confirmation boundary, access controls, and automated retention are documented in [the pilot application privacy notice](pilot-applications.md).
 
+Contact migration accepts reviewed CSV, TSV, and XLSX uploads. The server parses the uploaded file for preview and commit requests but does not retain a separate preview copy. A short-lived signed token binds the preview to the user, organization, file digest, schema, and row count. Preview and duplicate-review responses are private and non-cacheable; audit metadata records counts rather than spreadsheet rows or contact email addresses. Contact merges preserve the source record and point it to the selected active contact instead of deleting it.
+
 ## Data-handling rules
 
 - Keep source identifiers and approved summaries rather than indefinite copies of whole mailboxes.

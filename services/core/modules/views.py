@@ -12,6 +12,7 @@ import zipfile
 from datetime import timedelta, timezone as dt_timezone
 from decimal import Decimal, InvalidOperation
 from email.message import EmailMessage as SMTPMessage
+from typing import Any
 
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
@@ -32,6 +33,7 @@ from identity.permissions import (
     IsAuthenticatedAndMfaCompliant,
     active_membership,
     require_admin,
+    require_editor,
 )
 
 from .models import (
@@ -61,6 +63,15 @@ from .models import (
     WorkflowReview,
 )
 from .serializers import MODEL_SERIALIZERS
+from .crm_migration import (
+    CRMMigrationError,
+    build_contact_preview,
+    commit_contact_import,
+    contacts_csv,
+    contacts_xlsx,
+    duplicate_contact_pairs,
+    merge_contacts,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -110,7 +121,7 @@ def audit(
 class TenantView(APIView):
     permission_classes = [IsAuthenticatedAndMfaCompliant]
     parser_classes = [JSONParser, MultiPartParser, FormParser]
-    model = None
+    model: Any = None
 
     def organization(self, request, slug):
         organization = scoped_organization(request, slug)
@@ -142,6 +153,11 @@ class TenantListCreateView(TenantView):
 
     def get_queryset(self, organization):
         queryset = self.model.objects.filter(organization=organization)
+        if (
+            self.model is Contact
+            and self.request.query_params.get("include_merged") != "true"
+        ):
+            queryset = queryset.filter(record_status=Contact.RecordStatus.ACTIVE)
         query = self.request.query_params.get("q", "").strip()
         if query:
             text_fields = [
@@ -170,6 +186,8 @@ class TenantListCreateView(TenantView):
         organization, membership = self.organization(request, slug)
         if self.admin_only:
             require_admin(membership)
+        else:
+            require_editor(membership)
         if self.model is DocumentRecord:
             uploaded_file = request.FILES.get("file")
             if uploaded_file is not None:
@@ -261,6 +279,8 @@ class TenantDetailView(TenantView):
         organization, membership = self.organization(request, slug)
         if self.admin_only:
             require_admin(membership)
+        else:
+            require_editor(membership)
         instance = self.get_object(organization, pk)
         serializer = self.serializer(
             instance, data=request.data, partial=True, organization=organization
@@ -413,6 +433,225 @@ def build_resource_views(model, admin_only=False):
         {"model": model, "admin_only": admin_only},
     )
     return list_view.as_view(), detail_view.as_view()
+
+
+def crm_migration_error_response(error):
+    response = Response(error.response_data(), status=error.status_code)
+    response["Cache-Control"] = "private, no-store"
+    return response
+
+
+def private_crm_response(data, *, response_status=status.HTTP_200_OK):
+    response = Response(data, status=response_status)
+    response["Cache-Control"] = "private, no-store"
+    return response
+
+
+class ContactImportPreviewView(TenantView):
+    model = Contact
+
+    def post(self, request, slug):
+        organization, membership = self.organization(request, slug)
+        require_admin(membership)
+        try:
+            preview = build_contact_preview(
+                request.FILES.get("file"), organization, request.user
+            )
+        except CRMMigrationError as error:
+            return crm_migration_error_response(error)
+        audit(
+            request,
+            "contact.import_previewed",
+            organization,
+            "Contact",
+            metadata={
+                "file_type": preview["fileType"],
+                "row_count": preview["summary"]["totalRows"],
+                "invalid_count": preview["summary"]["invalidRows"],
+                "duplicate_count": preview["summary"]["exactMatches"]
+                + preview["summary"]["possibleDuplicates"],
+            },
+        )
+        return private_crm_response(preview)
+
+
+class ContactImportCommitView(TenantView):
+    model = Contact
+
+    def post(self, request, slug):
+        organization, membership = self.organization(request, slug)
+        require_admin(membership)
+        preview_token = str(request.data.get("previewToken", ""))
+        actions = request.data.get("actions", [])
+        if isinstance(actions, str):
+            try:
+                actions = json.loads(actions)
+            except json.JSONDecodeError:
+                return Response(
+                    {"detail": "Import actions must be valid JSON."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        if not preview_token or not isinstance(actions, list):
+            return Response(
+                {"detail": "The preview token and reviewed row actions are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            result = commit_contact_import(
+                request.FILES.get("file"),
+                organization,
+                request.user,
+                preview_token,
+                actions,
+            )
+        except CRMMigrationError as error:
+            return crm_migration_error_response(error)
+        audit(
+            request,
+            "contact.import_committed",
+            organization,
+            "Contact",
+            metadata={
+                key: result[key]
+                for key in ("created", "updated", "unchanged", "skipped", "invalid")
+            },
+        )
+        return private_crm_response(result, response_status=status.HTTP_201_CREATED)
+
+
+class ContactExportView(TenantView):
+    model = Contact
+
+    def get(self, request, slug):
+        organization, membership = self.organization(request, slug)
+        require_admin(membership)
+        export_format = request.query_params.get("fileFormat", "xlsx").lower()
+        if export_format not in {"csv", "xlsx"}:
+            return Response(
+                {"detail": "Choose csv or xlsx export format."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        include_merged = request.query_params.get("includeMerged") == "true"
+        contacts = Contact.objects.filter(organization=organization)
+        if not include_merged:
+            contacts = contacts.filter(record_status=Contact.RecordStatus.ACTIVE)
+        contacts = contacts.order_by(
+            "last_name", "first_name", "organization_name", "id"
+        )
+        if export_format == "csv":
+            content = contacts_csv(contacts)
+            content_type = "text/csv; charset=utf-8"
+        else:
+            content = contacts_xlsx(contacts)
+            content_type = (
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+        audit(
+            request,
+            "contact.exported",
+            organization,
+            "Contact",
+            metadata={
+                "format": export_format,
+                "record_count": contacts.count(),
+                "included_merged": include_merged,
+            },
+        )
+        response = HttpResponse(content, content_type=content_type)
+        response["Content-Disposition"] = (
+            f'attachment; filename="project-hope-contacts.{export_format}"'
+        )
+        response["Cache-Control"] = "private, no-store"
+        return response
+
+
+class ContactTemplateView(TenantView):
+    model = Contact
+
+    def get(self, request, slug):
+        _, membership = self.organization(request, slug)
+        require_editor(membership)
+        template_format = request.query_params.get("fileFormat", "xlsx").lower()
+        if template_format not in {"csv", "xlsx"}:
+            return Response(
+                {"detail": "Choose csv or xlsx template format."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if template_format == "csv":
+            content = contacts_csv([], template=True)
+            content_type = "text/csv; charset=utf-8"
+        else:
+            content = contacts_xlsx([], template=True)
+            content_type = (
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+        response = HttpResponse(content, content_type=content_type)
+        response["Content-Disposition"] = (
+            f'attachment; filename="project-hope-contact-template.{template_format}"'
+        )
+        response["Cache-Control"] = "private, no-store"
+        return response
+
+
+class ContactDuplicateCandidatesView(TenantView):
+    model = Contact
+
+    def get(self, request, slug):
+        organization, membership = self.organization(request, slug)
+        require_admin(membership)
+        try:
+            limit = int(request.query_params.get("limit", "100"))
+        except ValueError:
+            limit = 100
+        result = duplicate_contact_pairs(organization, limit=limit)
+        audit(
+            request,
+            "contact.duplicates_reviewed",
+            organization,
+            "Contact",
+            metadata={"candidate_count": result["totalCandidates"]},
+        )
+        return private_crm_response(result)
+
+
+class ContactMergeView(TenantView):
+    model = Contact
+
+    def post(self, request, slug):
+        organization, membership = self.organization(request, slug)
+        require_admin(membership)
+        if request.data.get("confirm") is not True:
+            return Response(
+                {"detail": "Confirm the reviewed contact merge before continuing."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            result = merge_contacts(
+                organization,
+                request.user,
+                request.data.get("primaryContactId"),
+                request.data.get("duplicateContactId"),
+            )
+        except (CRMMigrationError, TypeError, ValueError) as error:
+            if isinstance(error, CRMMigrationError):
+                return crm_migration_error_response(error)
+            return Response(
+                {"detail": "Both contact identifiers must be valid."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        audit(
+            request,
+            "contact.merged",
+            organization,
+            "Contact",
+            result["primary"]["id"],
+            metadata={
+                "merged_contact_id": result["mergedContactId"],
+                "reassigned": result["reassigned"],
+                "source_record_preserved": True,
+            },
+        )
+        return private_crm_response(result)
 
 
 class DocumentSearchView(TenantView):

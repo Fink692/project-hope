@@ -1,6 +1,6 @@
 # Owner launch decisions
 
-Project Hope 1.7 is published software. Turning it into a public managed service requires a small set of business and operating decisions that cannot be made safely in source code or inferred on the owner's behalf.
+Project Hope 1.8 is published software. Turning it into a public managed service requires a small set of business and operating decisions that cannot be made safely in source code or inferred on the owner's behalf.
 
 Do not put passwords, API keys, personal addresses, payment details, or signing certificates in this file or in the repository.
 

@@ -1,8 +1,8 @@
 # Foundation threat model
 
-Scope: v1.7 identity, organization APIs, memberships, invitations, account recovery, TOTP two-step verification, native tokens, audit events, deployment, background mail delivery, and AI boundary. This is a design baseline, not a penetration-test report.
+Scope: v1.8 identity, organization APIs, memberships, invitations, account recovery, TOTP two-step verification, native tokens, CRM spreadsheet migration and duplicate handling, audit events, deployment, background mail delivery, and AI boundary. This is a design baseline, not a penetration-test report.
 
-| Threat | Impact | Mitigation in v1.7 | Residual risk / follow-up |
+| Threat | Impact | Mitigation in v1.8 | Residual risk / follow-up |
 |---|---|---|---|
 | Cross-tenant object access | Confidentiality breach | Membership-scoped query helpers, 404 for non-members, cross-tenant tests | Every future module must add the same matrix tests |
 | Role escalation | Unauthorized administration | Central role policy, owner/admin checks, owner-only owner grants, protected owner UI, and serialized last-owner checks | Add programme/field-level policy and independent authorization testing before sensitive case-data use |
@@ -15,6 +15,9 @@ Scope: v1.7 identity, organization APIs, memberships, invitations, account recov
 | Concurrent access/mail changes | Lost owner access or duplicate security email | Organization membership updates lock rows in a stable order; invitation/reset mail jobs use atomic retry claims | Multi-region queue behavior and database-failover races require production load/failure testing |
 | Audit tampering | Loss of accountability | Append-only model behavior, restricted audit endpoint, no update/delete API | Hash chaining/immutable storage may be added for high-assurance deployments |
 | Secret leakage in logs | Credential or personal-data exposure | Invitation/reset credentials use URL fragments, bootstrap output omits tokens, queues store no reset credential, and audit metadata is minimized | Review proxy/mail/provider logs and add deployment-specific redaction tests |
+| Malicious or oversized contact spreadsheet | Formula execution, archive expansion, memory exhaustion, linked-data disclosure, or unsafe imports | File/row/column/archive limits; XLSX path, macro, external-link, expansion, and compression checks; formulas rejected at row level; CSV exports neutralize formula-leading text; short-lived file-bound preview; no retained preview copy | Production load tests, malware scanning policy, and organization-approved support handling remain required for unusually large migrations |
+| Cross-tenant or stale migration review | Contact disclosure or wrong-organization writes | Admin-only migration/export, editor-only writes, tenant-scoped candidates, signed preview bound to user/organization/file/schema/row count, locked commit revalidation, and cross-tenant tests | Independent BOLA/fuzz testing and production concurrency rehearsal remain open |
+| Incorrect duplicate merge | Lost or misattributed history | Explicit pair review and confirmation, deterministic match reasons, selected primary record, blank-only value fill, stricter sensitivity/consent preservation, related-record reassignment, source soft preservation, legal-hold and dual-volunteer-profile blocks | Real charity data-model acceptance and exceptional relationship/profile runbooks remain open |
 | Malicious seed/default credentials | Local compromise | Development-only command, environment-controlled password, documentation warning | Production installer must require rotation and disable demo seed |
 | Database exposure | Full tenant compromise | Local bind defaults, deployment docs, separate DB credentials | TLS/private networking and encrypted disks required in production |
 | Malicious email/document prompt injection | Unauthorized AI-assisted action | Mail/document content is untrusted, gateway operations are schema-bounded, deterministic fallbacks fail closed, and consequential outputs require human review | Maintain adversarial corpora and complete task-specific external evaluations before production AI claims |

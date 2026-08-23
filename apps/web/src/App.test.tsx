@@ -98,6 +98,157 @@ describe("Project Hope web shell", () => {
     expect(fetchMock.mock.calls.some(([, requestInit]) => requestInit?.method === "POST")).toBe(true);
   });
 
+  it("guides an owner through a reviewed spreadsheet import without forcing a multipart content type", async () => {
+    const organization = { id: "org-1", name: "Hope Demo", slug: "hope-demo", status: "active" };
+    const session = { user: { email: "owner@example.org", display_name: "Demo Owner" }, organizations: [{ organization, role: "owner" }] };
+    let imported = false;
+    let committedActions: unknown;
+    let previewRequest: RequestInit | undefined;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path.endsWith("/healthz/")) return Promise.resolve(new Response(JSON.stringify({ status: "ok", database: "ok" }), { status: 200 }));
+      if (path.endsWith("/me/")) return Promise.resolve(new Response(JSON.stringify(session), { status: 200 }));
+      if (path.endsWith("/contacts/")) return Promise.resolve(new Response(JSON.stringify(imported ? [{ id: "contact-1", display_name: "Amina Hope", first_name: "Amina", last_name: "Hope", email: "amina@example.org", contact_type: "person", consent_status: "unknown" }] : []), { status: 200 }));
+      if (path.endsWith("/crm/imports/preview/") && init?.method === "POST") {
+        previewRequest = init;
+        return Promise.resolve(new Response(JSON.stringify({
+          fileName: "contacts.csv",
+          fileType: "csv",
+          previewToken: "short-lived-preview",
+          expiresInSeconds: 900,
+          warnings: ["Ignored unrecognized columns: old category."],
+          summary: { totalRows: 2, newRecords: 1, exactMatches: 0, possibleDuplicates: 0, invalidRows: 1 },
+          rows: [
+            { rowNumber: 2, status: "new", values: { first_name: "Amina", last_name: "Hope", email: "amina@example.org" }, providedFields: ["first_name", "last_name", "email"], errors: {}, candidates: [], recommendedAction: "create" },
+            { rowNumber: 3, status: "invalid", values: { first_name: "Broken", email: "not-an-email" }, providedFields: ["first_name", "email"], errors: { email: ["Enter a valid email address."] }, candidates: [], recommendedAction: "skip" },
+          ],
+        }), { status: 200 }));
+      }
+      if (path.endsWith("/crm/imports/commit/") && init?.method === "POST") {
+        const form = init.body as FormData;
+        committedActions = JSON.parse(String(form.get("actions")));
+        imported = true;
+        return Promise.resolve(new Response(JSON.stringify({ created: 1, updated: 0, unchanged: 0, skipped: 0, invalid: 1 }), { status: 201 }));
+      }
+      return Promise.resolve(new Response("{}", { status: 200 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    fireEvent.click((await screen.findAllByRole("button", { name: "CRM" }))[0]);
+    fireEvent.click(await screen.findByRole("button", { name: "Import & export" }));
+    const file = new File(["first_name,last_name,email\nAmina,Hope,amina@example.org"], "contacts.csv", { type: "text/csv" });
+    fireEvent.change(screen.getByLabelText("Contact file"), { target: { files: [file] } });
+    const previewButton = screen.getByRole("button", { name: "Preview contact file" });
+    await waitFor(() => expect(previewButton).toBeEnabled());
+    fireEvent.submit(previewButton.closest("form") as HTMLFormElement);
+
+    expect(await screen.findByRole("heading", { name: "Review contacts.csv" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Action for row 2" })).toHaveValue("create");
+    expect(screen.getByRole("combobox", { name: "Action for row 3" })).toBeDisabled();
+    expect(screen.getByText("email: Enter a valid email address.")).toBeInTheDocument();
+    const previewHeaders = new Headers(previewRequest?.headers);
+    expect(previewRequest?.body).toBeInstanceOf(FormData);
+    expect(previewHeaders.has("Content-Type")).toBe(false);
+
+    const migrationAccessibility = await axe.run(document.body, {
+      runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"] },
+      rules: { "color-contrast": { enabled: false } },
+    });
+    expect(migrationAccessibility.violations.map(({ id }) => id)).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: "Import 1 reviewed row" }));
+
+    expect(await screen.findByRole("heading", { name: "Your contacts are ready." })).toBeInTheDocument();
+    expect(committedActions).toEqual([
+      { rowNumber: 2, action: "create" },
+      { rowNumber: 3, action: "skip" },
+    ]);
+  });
+
+  it("keeps the CRM read-only and hides bulk data controls for a viewer", async () => {
+    const organization = { id: "org-1", name: "Hope Demo", slug: "hope-demo", status: "active" };
+    const session = { user: { email: "viewer@example.org", display_name: "Demo Viewer" }, organizations: [{ organization, role: "viewer" }] };
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path.endsWith("/healthz/")) return Promise.resolve(new Response(JSON.stringify({ status: "ok", database: "ok" }), { status: 200 }));
+      if (path.endsWith("/me/")) return Promise.resolve(new Response(JSON.stringify(session), { status: 200 }));
+      if (path.endsWith("/contacts/")) return Promise.resolve(new Response(JSON.stringify([{ id: "contact-1", display_name: "Amina Hope", email: "amina@example.org" }]), { status: 200 }));
+      return Promise.resolve(new Response("{}", { status: 200 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    fireEvent.click((await screen.findAllByRole("button", { name: "CRM" }))[0]);
+    expect(await screen.findByText("You have view-only access. An owner, administrator, coordinator, or staff member can change contact records.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "New record" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Import & export" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Find duplicates" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit Amina Hope" })).not.toBeInTheDocument();
+  });
+
+  it("lets an editor correct a contact without recreating it", async () => {
+    const organization = { id: "org-1", name: "Hope Demo", slug: "hope-demo", status: "active" };
+    const session = { user: { email: "staff@example.org", display_name: "Demo Staff" }, organizations: [{ organization, role: "staff" }] };
+    let contact = { id: "contact-1", display_name: "Amina Hope", contact_type: "person", first_name: "Amina", last_name: "Hope", email: "old@example.org", phone: "", organization_name: "", preferred_name: "", external_ref: "", sensitivity: "internal", consent_status: "unknown", notes: "" };
+    let patchPayload: Record<string, unknown> | undefined;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path.endsWith("/healthz/")) return Promise.resolve(new Response(JSON.stringify({ status: "ok", database: "ok" }), { status: 200 }));
+      if (path.endsWith("/me/")) return Promise.resolve(new Response(JSON.stringify(session), { status: 200 }));
+      if (path.endsWith("/contacts/contact-1/") && init?.method === "PATCH") {
+        patchPayload = JSON.parse(String(init.body));
+        contact = { ...contact, ...patchPayload };
+        return Promise.resolve(new Response(JSON.stringify(contact), { status: 200 }));
+      }
+      if (path.endsWith("/contacts/")) return Promise.resolve(new Response(JSON.stringify([contact]), { status: 200 }));
+      return Promise.resolve(new Response("{}", { status: 200 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    fireEvent.click((await screen.findAllByRole("button", { name: "CRM" }))[0]);
+    fireEvent.click(await screen.findByRole("button", { name: "Edit Amina Hope" }));
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "corrected@example.org" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save record" }));
+
+    await waitFor(() => expect(patchPayload).toMatchObject({ email: "corrected@example.org" }));
+    expect(await screen.findByText("corrected@example.org")).toBeInTheDocument();
+    expect(screen.queryByRole("form", { name: "Edit Amina Hope" })).not.toBeInTheDocument();
+  });
+
+  it("requires explicit review before preserving and merging duplicate contacts", async () => {
+    const organization = { id: "org-1", name: "Hope Demo", slug: "hope-demo", status: "active" };
+    const session = { user: { email: "admin@example.org", display_name: "Demo Administrator" }, organizations: [{ organization, role: "admin" }] };
+    const candidate = (id: string, name: string, email: string) => ({ id, displayName: name, contactType: "person", firstName: name.split(" ")[0], lastName: "Hope", organizationName: "", email, phone: "2045550100", externalRef: "", sensitivity: "internal", consentStatus: "unknown", updatedAt: "2026-08-23T12:00:00Z", matchReasons: [] });
+    let merged = false;
+    let mergePayload: Record<string, unknown> | undefined;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path.endsWith("/healthz/")) return Promise.resolve(new Response(JSON.stringify({ status: "ok", database: "ok" }), { status: 200 }));
+      if (path.endsWith("/me/")) return Promise.resolve(new Response(JSON.stringify(session), { status: 200 }));
+      if (path.endsWith("/contacts/")) return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }));
+      if (path.endsWith("/crm/duplicates/merge/") && init?.method === "POST") {
+        mergePayload = JSON.parse(String(init.body));
+        merged = true;
+        return Promise.resolve(new Response(JSON.stringify({ mergedContactId: "contact-2" }), { status: 200 }));
+      }
+      if (path.endsWith("/crm/duplicates/")) return Promise.resolve(new Response(JSON.stringify({ totalActiveContacts: merged ? 1 : 2, totalCandidates: merged ? 0 : 1, results: merged ? [] : [{ first: candidate("contact-1", "Amina Hope", "amina@example.org"), second: candidate("contact-2", "Amina H. Hope", "amina@example.org"), matchReasons: ["same email"], confidence: "exact" }] }), { status: 200 }));
+      return Promise.resolve(new Response("{}", { status: 200 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    fireEvent.click((await screen.findAllByRole("button", { name: "CRM" }))[0]);
+    fireEvent.click(await screen.findByRole("button", { name: "Find duplicates" }));
+    const mergeButton = await screen.findByRole("button", { name: "Merge reviewed pair" });
+    expect(mergeButton).toBeDisabled();
+    fireEvent.click(screen.getByRole("checkbox", { name: "I reviewed both records and want to merge this pair." }));
+    fireEvent.click(mergeButton);
+
+    expect(await screen.findByText("The records were merged. The source record and its history were preserved.")).toBeInTheDocument();
+    expect(mergePayload).toEqual({ primaryContactId: "contact-1", duplicateContactId: "contact-2", confirm: true });
+  });
+
   it("captures a consented Founding 10 application with campaign attribution", async () => {
     window.history.replaceState({}, "", "/?utm_source=linkedin&utm_medium=social&utm_campaign=founding-10");
     let submittedPayload: Record<string, unknown> | undefined;

@@ -18,6 +18,8 @@ Create an operator-owned environment file outside the repository and set:
 - `AI_GATEWAY_TOKEN`
 - `DRF_NUM_PROXIES` when the request path contains more than the bundled Caddy proxy (the Compose default is `1`; count only trusted reverse proxies)
 
+The supplied CRM migration defaults accept files up to 5 MB, 2,500 contact rows, and 50 columns, with a 15-minute review window. Set `PROJECT_HOPE_MAX_CRM_IMPORT_BYTES`, `PROJECT_HOPE_MAX_CRM_IMPORT_ROWS`, or `PROJECT_HOPE_CRM_IMPORT_PREVIEW_MAX_AGE_SECONDS` only after the organization approves a different migration size and the deployment passes corresponding memory, timeout, and concurrency tests.
+
 Use a private network, encrypted disks, a firewall that exposes only 80/443, and an encrypted restic repository. Do not use the development compose file or the demo seed credentials for real data.
 
 Generate the first MFA encryption key on an operator-controlled computer and place only the output in the private production environment file:
@@ -40,7 +42,7 @@ docker compose --env-file .env.production -f deploy/podman/compose.production.ym
 docker compose --env-file .env.production -f deploy/podman/compose.production.yml ps
 ```
 
-Verify the public health endpoint, first-time two-step enrollment, a fresh-browser MFA sign-in, one recovery-code sign-in, admin redirect, Caddy certificate, worker logs, outbound email, and a synthetic document upload before importing real records. Confirm that organization names and records remain unavailable before required enrollment. If the Founding 10 form is enabled, submit and confirm one synthetic application, inspect `python manage.py pilot_metrics`, remove the synthetic record, and verify the application-retention worker. Run `deploy/systemd/backup.ps1` or `backup.sh`, then perform a restore drill into separate staging targets.
+Verify the public health endpoint, first-time two-step enrollment, a fresh-browser MFA sign-in, one recovery-code sign-in, admin redirect, Caddy certificate, worker logs, outbound email, and a synthetic document upload before importing real records. Confirm that organization names and records remain unavailable before required enrollment. Use synthetic contacts to preview one new, matched, possible-duplicate, and invalid spreadsheet row; commit only the reviewed row; export CSV and XLSX; and rehearse a source-preserving duplicate merge. If the Founding 10 form is enabled, submit and confirm one synthetic application, inspect `python manage.py pilot_metrics`, remove the synthetic record, and verify the application-retention worker. Run `deploy/systemd/backup.ps1` or `backup.sh`, then perform a restore drill into separate staging targets.
 
 ## Create the first workspace owner
 

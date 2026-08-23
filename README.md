@@ -12,6 +12,14 @@ It works like a normal app: staff install it, sign in, and get to work. The desk
 
 ![Project Hope Founding 10 application and managed pilot offer](docs/assets/founding-10.png)
 
+### Bring existing contacts without a blind import
+
+| Review every spreadsheet row before saving | Preserve and merge reviewed duplicates |
+|---|---|
+| ![Project Hope CRM import review using synthetic contacts](docs/assets/crm-import-review-live-v1.8.png) | ![Project Hope duplicate contact review using synthetic contacts](docs/assets/crm-duplicates-live-v1.8.png) |
+
+Owners can use a normal Excel or CSV file, correct invalid rows, choose what happens to each match, and export the data again. The [plain-language contact migration guide](docs/MOVING_CONTACTS_FOR_CHARITIES.md) walks through the complete process without developer tools.
+
 ### Secure onboarding that feels like a normal app
 
 | Private team invitation | Owner-managed team access |
@@ -41,6 +49,7 @@ The built-in application requires explicit consent, verifies every email, preven
 |---|---|
 | Installing the app | [Download the latest desktop installers](https://github.com/Fink692/project-hope/releases/latest) |
 | Running the Founding 10 programme | [Commercial readiness and launch runbook](docs/commercial-readiness.md) |
+| Moving contacts from a spreadsheet | [Move your contacts into Project Hope](docs/MOVING_CONTACTS_FOR_CHARITIES.md) |
 | Announcing the release | [LinkedIn release post](docs/launch/linkedin-release-post.md) |
 | Finding the first pilot partners | [Permission-first outreach kit](docs/launch/founding-10-outreach-kit.md) |
 | Understanding the charity experience | [Project Hope as an app](docs/DISTRIBUTION_FOR_CHARITIES.md) |
@@ -71,7 +80,7 @@ ChromeOS and supported browsers can use the browser-installable version. iPhone 
 
 ## What is inside
 
-- **Coordinate:** contacts, households, relationships, consent, volunteers, programs, events, shifts, waitlists, and calendar export.
+- **Coordinate:** contacts with guided spreadsheet migration and duplicate cleanup, households, relationships, consent, volunteers, programs, events, shifts, waitlists, and calendar export.
 - **Understand:** documents, bounded extraction, search, analytics, grants, evidence workflows, resources, translation, and donor insights.
 - **Communicate safely:** minimized mailbox imports, injection flags, draft approval, email delivery, voice consent, callbacks, and transfer controls.
 - **Extend responsibly:** governed plugins, scoped public API clients, capability tokens, append-only audit events, and human review.
@@ -88,6 +97,7 @@ The platform remains useful with AI disabled. AI features use bounded, replaceab
 - Human approval before consequential actions
 - Accessible keyboard-first interfaces with reduced-motion support
 - Safe upload handling, data minimization, and fail-closed production configuration
+- Reviewed CSV/XLSX contact migration, spreadsheet formula protection, portable export, and source-preserving duplicate merges
 - No paid AI API or cloud service is a required dependency
 - The one-command local stack prepares a private Ollama chat model and semantic embedding model automatically; no AI account or API key is required.
 
@@ -188,7 +198,7 @@ GitHub Actions also verifies the backend, web client, mobile client, desktop pac
 
 ## Release status
 
-The current public release is [Project Hope 1.7.0](https://github.com/Fink692/project-hope/releases/tag/v1.7.0), with built-in two-step verification and recovery, secure team onboarding, native desktop installers, the local AI runtime, and the Founding 10 acquisition workflow. The [full build status](docs/full-build-status.md) records the implemented product surface and the remaining organization-owned launch requirements.
+The current public release is [Project Hope 1.8.0](https://github.com/Fink692/project-hope/releases/tag/v1.8.0), with guided and reversible contact migration, built-in two-step verification and recovery, secure team onboarding, native desktop installers, the local AI runtime, and the Founding 10 acquisition workflow. The [full build status](docs/full-build-status.md) records the implemented product surface and the remaining organization-owned launch requirements.
 
 ## Principles
 

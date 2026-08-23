@@ -39,6 +39,11 @@ class Contact(TenantRecord):
         GRANTED = "granted", "Granted"
         WITHDRAWN = "withdrawn", "Withdrawn"
 
+    class RecordStatus(models.TextChoices):
+        ACTIVE = "active", "Active"
+        MERGED = "merged", "Merged"
+        ARCHIVED = "archived", "Archived"
+
     contact_type = models.CharField(
         max_length=24, choices=ContactType.choices, default=ContactType.PERSON
     )
@@ -56,13 +61,37 @@ class Contact(TenantRecord):
         max_length=16, choices=ConsentStatus.choices, default=ConsentStatus.UNKNOWN
     )
     notes = models.TextField(blank=True)
+    record_status = models.CharField(
+        max_length=16, choices=RecordStatus.choices, default=RecordStatus.ACTIVE
+    )
+    merged_into = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="merged_contacts",
+    )
+    merged_at = models.DateTimeField(null=True, blank=True)
+    merged_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="contact_merges",
+    )
 
     class Meta:
         ordering = ["last_name", "first_name", "organization_name"]
         indexes = [
             models.Index(fields=["organization", "email"]),
             models.Index(fields=["organization", "external_ref"]),
+            models.Index(fields=["organization", "record_status"]),
         ]
+
+    def save(self, *args, **kwargs):
+        self.email = self.email.strip().lower()
+        self.external_ref = self.external_ref.strip()
+        super().save(*args, **kwargs)
 
     @property
     def display_name(self):

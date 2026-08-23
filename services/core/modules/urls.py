@@ -38,6 +38,12 @@ from .models import (
 from .views import (
     APIClientIssueView,
     AIOperationView,
+    ContactDuplicateCandidatesView,
+    ContactExportView,
+    ContactImportCommitView,
+    ContactImportPreviewView,
+    ContactMergeView,
+    ContactTemplateView,
     DocumentSearchView,
     DonorCohortView,
     EmailApprovalView,
@@ -120,6 +126,36 @@ for route, model in RESOURCE_ROUTES.items():
 
 urlpatterns.extend(
     [
+        path(
+            "organizations/<slug:slug>/crm/imports/preview/",
+            ContactImportPreviewView.as_view(),
+            name="crm-import-preview",
+        ),
+        path(
+            "organizations/<slug:slug>/crm/imports/commit/",
+            ContactImportCommitView.as_view(),
+            name="crm-import-commit",
+        ),
+        path(
+            "organizations/<slug:slug>/crm/export/",
+            ContactExportView.as_view(),
+            name="crm-export",
+        ),
+        path(
+            "organizations/<slug:slug>/crm/template/",
+            ContactTemplateView.as_view(),
+            name="crm-template",
+        ),
+        path(
+            "organizations/<slug:slug>/crm/duplicates/",
+            ContactDuplicateCandidatesView.as_view(),
+            name="crm-duplicate-candidates",
+        ),
+        path(
+            "organizations/<slug:slug>/crm/duplicates/merge/",
+            ContactMergeView.as_view(),
+            name="crm-duplicate-merge",
+        ),
         path(
             "organizations/<slug:slug>/documents/search/",
             DocumentSearchView.as_view(),

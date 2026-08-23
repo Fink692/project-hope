@@ -6,6 +6,12 @@ from .models import Membership, MultiFactorCredential
 
 
 ADMIN_ROLES = {Membership.Role.OWNER, Membership.Role.ADMIN}
+EDITOR_ROLES = {
+    Membership.Role.OWNER,
+    Membership.Role.ADMIN,
+    Membership.Role.COORDINATOR,
+    Membership.Role.STAFF,
+}
 
 
 class IsAuthenticatedAndMfaCompliant(BasePermission):
@@ -49,6 +55,12 @@ def require_membership(user, organization):
 def require_admin(membership):
     if membership.role not in ADMIN_ROLES:
         raise PermissionDenied("Owner or administrator role required.")
+    return membership
+
+
+def require_editor(membership):
+    if membership.role not in EDITOR_ROLES:
+        raise PermissionDenied("A role with record-editing access is required.")
     return membership
 
 

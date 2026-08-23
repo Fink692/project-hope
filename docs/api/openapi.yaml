@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Project Hope API
-  version: 1.7.0
+  version: 1.8.0
   description: Tenant-bound API for self-hosted charity operations.
 servers:
   - url: /api/v1
@@ -228,8 +228,120 @@ paths:
         '403': { description: Administrator access required }
   /organizations/{slug}/contacts/:
     parameters: [{ $ref: '#/components/parameters/OrganizationSlug' }]
-    get: { summary: List tenant contacts, responses: { '200': { description: Contacts } } }
-    post: { summary: Create a tenant contact, responses: { '201': { description: Created } } }
+    get: { summary: List active tenant contacts, responses: { '200': { description: Contacts } } }
+    post: { summary: Create a tenant contact, responses: { '201': { description: Created }, '403': { description: Editing role required } } }
+  /organizations/{slug}/contacts/{id}/:
+    parameters: [{ $ref: '#/components/parameters/OrganizationSlug' }, { $ref: '#/components/parameters/Id' }]
+    get: { summary: Read one tenant contact, responses: { '200': { description: Contact }, '404': { description: Contact is unavailable in this organization } } }
+    patch: { summary: Correct a tenant contact, responses: { '200': { description: Contact updated }, '403': { description: Editing role required }, '404': { description: Contact is unavailable in this organization } } }
+  /organizations/{slug}/crm/imports/preview/:
+    parameters: [{ $ref: '#/components/parameters/OrganizationSlug' }]
+    post:
+      summary: Privately preview a CSV, TSV, or XLSX contact import without changing records
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '200':
+          description: Short-lived user-, tenant-, and file-bound review payload
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ContactImportPreview' }
+        '400': { description: Invalid columns, workbook, archive, or CSV content }
+        '403': { description: Owner or administrator permission required }
+        '413': { description: Configured file, row, archive, or expansion limit exceeded }
+        '415': { description: Unsupported file type }
+  /organizations/{slug}/crm/imports/commit/:
+    parameters: [{ $ref: '#/components/parameters/OrganizationSlug' }]
+    post:
+      summary: Revalidate the same file and commit explicitly reviewed contact actions
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, previewToken, actions]
+              properties:
+                file: { type: string, format: binary }
+                previewToken: { type: string, maxLength: 4096 }
+                actions: { type: string, description: JSON array of rowNumber plus create, skip, or update action and optional targetContactId. }
+      responses:
+        '201':
+          description: Reviewed import committed atomically
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ContactImportResult' }
+        '400': { description: Invalid action or import data }
+        '403': { description: Owner or administrator permission required }
+        '409': { description: Preview expired, file changed, or a reviewed match is no longer current }
+        '413': { description: Configured import limit exceeded }
+  /organizations/{slug}/crm/template/:
+    parameters:
+      - { $ref: '#/components/parameters/OrganizationSlug' }
+      - { name: fileFormat, in: query, schema: { type: string, enum: [xlsx, csv], default: xlsx } }
+    get:
+      summary: Download a guided contact migration template
+      responses:
+        '200':
+          description: Excel workbook or UTF-8 CSV template
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: { schema: { type: string, format: binary } }
+            text/csv: { schema: { type: string, format: binary } }
+        '403': { description: Editing role required }
+  /organizations/{slug}/crm/export/:
+    parameters:
+      - { $ref: '#/components/parameters/OrganizationSlug' }
+      - { name: fileFormat, in: query, schema: { type: string, enum: [xlsx, csv], default: xlsx } }
+      - { name: includeMerged, in: query, schema: { type: boolean, default: false } }
+    get:
+      summary: Export active contacts in a spreadsheet-safe portable format
+      responses:
+        '200':
+          description: Excel workbook or UTF-8 BOM CSV export
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: { schema: { type: string, format: binary } }
+            text/csv: { schema: { type: string, format: binary } }
+        '403': { description: Owner or administrator permission required }
+  /organizations/{slug}/crm/duplicates/:
+    parameters:
+      - { $ref: '#/components/parameters/OrganizationSlug' }
+      - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 250, default: 100 } }
+    get:
+      summary: Review deterministic exact, strong, and possible duplicate contact pairs
+      responses:
+        '200':
+          description: Duplicate candidate pairs
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ContactDuplicateReview' }
+        '403': { description: Owner or administrator permission required }
+  /organizations/{slug}/crm/duplicates/merge/:
+    parameters: [{ $ref: '#/components/parameters/OrganizationSlug' }]
+    post:
+      summary: Preserve and merge a reviewed duplicate contact into the selected active contact
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ContactMergeRequest' }
+      responses:
+        '200':
+          description: Source record preserved and linked records reassigned
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ContactMergeResult' }
+        '400': { description: Explicit confirmation or valid identifiers missing }
+        '403': { description: Owner or administrator permission required }
+        '404': { description: Either contact is unavailable in this organization }
+        '409': { description: Both contacts have volunteer profiles or records changed }
+        '423': { description: Contact legal hold prevents merge }
   /organizations/{slug}/workflows/{id}/review/:
     parameters: [{ $ref: '#/components/parameters/OrganizationSlug' }, { $ref: '#/components/parameters/Id' }]
     post: { summary: Approve or reject a bounded workflow, responses: { '200': { description: Reviewed } } }
@@ -291,3 +403,99 @@ components:
         utm_campaign: { type: string, maxLength: 160 }
         referrer: { type: string, format: uri, maxLength: 500 }
         company_website: { type: string, maxLength: 500, description: Bot-detection honeypot; real clients leave this empty. }
+    ContactCandidate:
+      type: object
+      required: [id, displayName, contactType, email, phone, sensitivity, consentStatus, matchReasons]
+      properties:
+        id: { type: string, format: uuid }
+        displayName: { type: string }
+        contactType: { type: string, enum: [person, organization, service_user, donor, volunteer] }
+        firstName: { type: string }
+        lastName: { type: string }
+        organizationName: { type: string }
+        email: { type: string }
+        phone: { type: string }
+        externalRef: { type: string }
+        sensitivity: { type: string, enum: [public, internal, confidential, highly_sensitive, restricted] }
+        consentStatus: { type: string, enum: [unknown, granted, withdrawn] }
+        updatedAt: { type: string, format: date-time }
+        matchReasons: { type: array, items: { type: string } }
+    ContactImportRow:
+      type: object
+      required: [rowNumber, status, values, providedFields, errors, candidates, recommendedAction]
+      properties:
+        rowNumber: { type: integer, minimum: 2 }
+        status: { type: string, enum: [new, exact_match, possible_duplicate, invalid] }
+        values: { type: object, additionalProperties: { type: string } }
+        providedFields: { type: array, items: { type: string } }
+        errors: { type: object, additionalProperties: { type: array, items: { type: string } } }
+        candidates: { type: array, items: { $ref: '#/components/schemas/ContactCandidate' } }
+        recommendedAction: { type: string, enum: [create, skip] }
+    ContactImportPreview:
+      type: object
+      required: [schemaVersion, fileName, fileType, fileSha256, summary, warnings, rows, expiresInSeconds, previewToken]
+      properties:
+        schemaVersion: { type: integer }
+        fileName: { type: string }
+        fileType: { type: string, enum: [csv, xlsx] }
+        fileSha256: { type: string, pattern: '^[a-f0-9]{64}$' }
+        columns: { type: array, items: { type: string } }
+        summary:
+          type: object
+          required: [totalRows, newRecords, exactMatches, possibleDuplicates, invalidRows]
+          properties:
+            totalRows: { type: integer, minimum: 0 }
+            newRecords: { type: integer, minimum: 0 }
+            exactMatches: { type: integer, minimum: 0 }
+            possibleDuplicates: { type: integer, minimum: 0 }
+            invalidRows: { type: integer, minimum: 0 }
+        warnings: { type: array, items: { type: string } }
+        rows: { type: array, items: { $ref: '#/components/schemas/ContactImportRow' } }
+        expiresInSeconds: { type: integer, minimum: 1 }
+        previewToken: { type: string }
+    ContactImportResult:
+      type: object
+      required: [created, updated, unchanged, skipped, invalid, createdIds, updatedIds, fileSha256]
+      properties:
+        created: { type: integer, minimum: 0 }
+        updated: { type: integer, minimum: 0 }
+        unchanged: { type: integer, minimum: 0 }
+        skipped: { type: integer, minimum: 0 }
+        invalid: { type: integer, minimum: 0 }
+        createdIds: { type: array, items: { type: string, format: uuid } }
+        updatedIds: { type: array, items: { type: string, format: uuid } }
+        fileSha256: { type: string, pattern: '^[a-f0-9]{64}$' }
+    ContactDuplicateReview:
+      type: object
+      required: [totalActiveContacts, totalCandidates, results]
+      properties:
+        totalActiveContacts: { type: integer, minimum: 0 }
+        totalCandidates: { type: integer, minimum: 0 }
+        results:
+          type: array
+          items:
+            type: object
+            required: [first, second, matchReasons, confidence]
+            properties:
+              first: { $ref: '#/components/schemas/ContactCandidate' }
+              second: { $ref: '#/components/schemas/ContactCandidate' }
+              matchReasons: { type: array, items: { type: string } }
+              confidence: { type: string, enum: [exact, strong, possible] }
+    ContactMergeRequest:
+      type: object
+      additionalProperties: false
+      required: [primaryContactId, duplicateContactId, confirm]
+      properties:
+        primaryContactId: { type: string, format: uuid }
+        duplicateContactId: { type: string, format: uuid }
+        confirm: { type: boolean, const: true }
+    ContactMergeResult:
+      type: object
+      required: [primary, mergedContactId, reassigned, preserved]
+      properties:
+        primary: { $ref: '#/components/schemas/ContactCandidate' }
+        mergedContactId: { type: string, format: uuid }
+        reassigned:
+          type: object
+          additionalProperties: { type: integer, minimum: 0 }
+        preserved: { type: boolean, const: true }
