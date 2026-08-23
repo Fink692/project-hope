@@ -5,7 +5,7 @@ Status is evidence-based: **implemented** means tested code exists; **partial** 
 | ID | Requirement | Current evidence | Status / open gate |
 |---|---|---|---|
 | R-01 | Self-hosted baseline | Compose topology, Django/PostgreSQL, web and local Ollama services | Implemented baseline; production operator controls remain |
-| R-02 | Authentication | Email user, hashed passwords, session/token login, expiring invitations, one-time account recovery | Partial: OIDC/MFA is open |
+| R-02 | Authentication | Email user, hashed passwords, session/token login, expiring invitations, one-time password recovery, TOTP two-step verification, one-time recovery codes, encrypted secrets, and session/token supersession | Implemented application baseline; optional OIDC/SSO, phishing-resistant factors, remote session controls, and independent assessment remain open |
 | R-03 | Organizations and memberships | Organization, Membership, bootstrap command, Team & access UI | Implemented; nontechnical-admin acceptance is open |
 | R-04 | Role-based authorization | Owner/admin/coordinator/staff/viewer policy and authorization tests | Implemented baseline; independent review is open |
 | R-05 | Tenant isolation | Organization membership required before scoped lookup; cross-tenant tests | Implemented baseline; broader BOLA/fuzz test is open |

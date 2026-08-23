@@ -47,7 +47,7 @@ A technical setup partner or hosting provider completes this once:
 
 - deploys the production Compose stack;
 - connects the organization’s domain and HTTPS certificate;
-- configures MFA-backed identity, email, secrets, backups, and monitoring;
+- configures Project Hope's built-in MFA encryption key and recovery policy, email, secrets, backups, and monitoring;
 - creates the EAS project and signs the iPhone/Android builds;
 - completes a synthetic-data staging test.
 

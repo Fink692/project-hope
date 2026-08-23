@@ -4,7 +4,7 @@ Project Hope has an implemented foundation and broad module baselines. The roadm
 
 ## Track A — dependable workspace
 
-1. **Identity and team onboarding — code complete, production gate open.** Secure invitations, account recovery, and role management are implemented. Close after OIDC/MFA or an approved MFA gateway, independent authorization review, and a nontechnical charity administrator completes setup unaided.
+1. **Identity and team onboarding — application baseline complete, production gate open.** Secure invitations, account recovery, role management, built-in TOTP two-step verification, one-time recovery codes, and security-change revocation are implemented. Close after independent authorization/session review, recovery rehearsal, and a nontechnical charity administrator completes setup unaided. OIDC/SSO and phishing-resistant factors remain expansion work, not substitutes for this field evidence.
 2. **CRM migration — baseline implemented.** Close when a charity can import, correct, deduplicate, and export a representative spreadsheet without loss.
 3. **Volunteer and scheduling — baseline implemented.** Close after a real recruitment-to-shift workflow, including reminders/cancellations/attendance, passes acceptance.
 4. **Documents — baseline implemented.** Close after malware/OCR integrations and a permission-aware corpus proves exact-location retrieval.

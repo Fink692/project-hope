@@ -18,6 +18,12 @@ It works like a normal app: staff install it, sign in, and get to work. The desk
 |---|---|
 | ![Project Hope secure team invitation](docs/assets/team-invitation-live-v1.6.png) | ![Project Hope Team and access workspace](docs/assets/team-access-live-v1.6.png) |
 
+### Built-in account protection
+
+![Project Hope guided two-step verification setup with the private demo QR and key redacted](docs/assets/account-security-live-v1.7.png)
+
+![Project Hope protected workspace showing one-time recovery codes redacted in the release image](docs/assets/recovery-codes-live-v1.7.png)
+
 ## Founding 10 managed pilot
 
 Project Hope's source is publicly visible, but this repository does not yet include an approved software license, so reuse rights must not be assumed. The intended self-hosted Community offering is zero-cost once the copyright owner approves its licensing terms. The Founding 10 programme is for charities that want someone else to handle the technical launch and ongoing maintenance.
@@ -75,6 +81,7 @@ The platform remains useful with AI disabled. AI features use bounded, replaceab
 ## Built for trust
 
 - Organization-scoped access, roles, permissions, audit history, and legal holds
+- Built-in authenticator-app two-step verification, single-use recovery codes, encrypted MFA secrets, and automatic revocation of older sessions and app tokens after security changes
 - Secure team onboarding with expiring one-time invitations, in-app role management, resend/revoke controls, and delivery retries
 - Privacy-safe account recovery with one-hour single-use links and token/session invalidation
 - Charity-controlled data with replaceable self-hosted infrastructure
@@ -90,7 +97,7 @@ The setup partner owns the one-time technical launch:
 
 - deploy the production Compose stack;
 - connect the organization’s domain and HTTPS;
-- configure an approved MFA access gateway until native OIDC/MFA lands, plus email, secrets, backups, and monitoring;
+- configure the built-in MFA encryption key and shared security cache, plus email, secrets, backups, and monitoring;
 - create the organization’s mobile build/signing configuration;
 - run a synthetic-data staging test;
 - build a preconfigured desktop installer.
@@ -181,7 +188,7 @@ GitHub Actions also verifies the backend, web client, mobile client, desktop pac
 
 ## Release status
 
-The current public release is [Project Hope 1.6.0](https://github.com/Fink692/project-hope/releases/tag/v1.6.0), with secure team onboarding, account recovery, native desktop installers, the local AI runtime, and the Founding 10 acquisition workflow. The [full build status](docs/full-build-status.md) records the implemented product surface and the remaining organization-owned launch requirements.
+The current public release is [Project Hope 1.7.0](https://github.com/Fink692/project-hope/releases/tag/v1.7.0), with built-in two-step verification and recovery, secure team onboarding, native desktop installers, the local AI runtime, and the Founding 10 acquisition workflow. The [full build status](docs/full-build-status.md) records the implemented product surface and the remaining organization-owned launch requirements.
 
 ## Principles
 

@@ -1,6 +1,6 @@
 # Owner launch decisions
 
-Project Hope 1.6 is published software. Turning it into a public managed service requires a small set of business and operating decisions that cannot be made safely in source code or inferred on the owner's behalf.
+Project Hope 1.7 is published software. Turning it into a public managed service requires a small set of business and operating decisions that cannot be made safely in source code or inferred on the owner's behalf.
 
 Do not put passwords, API keys, personal addresses, payment details, or signing certificates in this file or in the repository.
 
@@ -13,7 +13,7 @@ Do not put passwords, API keys, personal addresses, payment details, or signing 
 | Hosting account and region | Use a dedicated operator-owned production account and a region accepted in writing by each pilot charity. | Provider, region, service-provider disclosure, access owners, and recovery route. |
 | Public domain | Use one operator-controlled HTTPS domain for the web app and confirmation links. | Domain control, DNS, valid certificate, and exact `PROJECT_HOPE_PUBLIC_URL`. |
 | Transactional email | Use an authenticated relay on a verified sending domain. | Successful delivery, expiry, retry, duplicate, and spam-placement tests. |
-| Privileged MFA | Put production behind an approved MFA access gateway until application-level OIDC/MFA is completed and independently tested. | Enrolled operators, recovery procedure, short privileged sessions, and access review. |
+| Account security | Require Project Hope's built-in authenticator enrollment in production; store its dedicated encryption key in the operator's secret manager and define identity-checked recovery. Add an approved gateway or OIDC/SSO only when the charity requires it. | Clean-device enrollment/sign-in evidence, protected key backup, tested user/operator recovery, key-rotation result, short privileged sessions, and access review. |
 | Privacy and service terms | Approve pilot terms, privacy notice, provider/subprocessor disclosure, data location, cancellation, and incident contacts. | Signed or accepted terms before a real workspace receives data. |
 | Backups and incidents | Use encrypted backups in a separate failure domain and rehearse restoration. | Dated backup, restore, retention, alerting, and incident-response drill records. |
 | Billing | Invoice the small founding cohort manually after a workspace is live; do not collect a card in the application. | Approved invoice identity/tax handling, written CAD $149 pilot terms, and payment reconciliation. |
@@ -40,7 +40,7 @@ Before deployment, the owner should provide or approve:
 - the domain to configure;
 - the transactional-email account and sending identity;
 - the support and privacy contact route;
-- the MFA gateway or authority to complete application-level OIDC/MFA;
+- the MFA encryption-key custody, account-recovery approvers, and any additional OIDC/SSO or gateway requirement;
 - the license and pilot terms, after appropriate legal review;
 - billing/invoice identity and tax treatment; and
 - code-signing and mobile-store accounts when those channels are required.

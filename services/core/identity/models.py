@@ -4,6 +4,7 @@ from django.contrib.auth.base_user import BaseUserManager
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.db import models
 from django.db.models.functions import Lower
+from django.utils import timezone
 
 
 class UserManager(BaseUserManager):
@@ -38,6 +39,8 @@ class User(AbstractBaseUser, PermissionsMixin):
     last_name = models.CharField(max_length=150, blank=True)
     is_staff = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
+    security_version = models.PositiveBigIntegerField(default=0)
+    security_changed_at = models.DateTimeField(default=timezone.now)
     date_joined = models.DateTimeField(auto_now_add=True)
 
     objects = UserManager()
@@ -55,12 +58,54 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def save(self, *args, **kwargs):
         self.email = self.email.strip().lower()
+        update_fields = kwargs.get("update_fields")
+        if self.pk:
+            previous = (
+                type(self)
+                .objects.filter(pk=self.pk)
+                .values("password", "security_version")
+                .first()
+            )
+            if previous is not None:
+                if (
+                    previous["password"] != self.password
+                    and self.security_version <= previous["security_version"]
+                ):
+                    self.security_version = previous["security_version"] + 1
+                if self.security_version != previous["security_version"]:
+                    self.security_changed_at = timezone.now()
+                    if update_fields is not None:
+                        kwargs["update_fields"] = set(update_fields) | {
+                            "security_version",
+                            "security_changed_at",
+                        }
         super().save(*args, **kwargs)
 
     @property
     def display_name(self):
         name = f"{self.first_name} {self.last_name}".strip()
         return name or self.email
+
+
+class MultiFactorCredential(models.Model):
+    """One encrypted TOTP credential and hashed recovery set per user."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.OneToOneField(
+        "User", on_delete=models.CASCADE, related_name="mfa_credential"
+    )
+    encrypted_secret = models.TextField()
+    recovery_code_hashes = models.JSONField(default=list)
+    recovery_key_id = models.CharField(max_length=16, blank=True)
+    last_used_counter = models.BigIntegerField(default=-1)
+    enabled_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["user__email"]
+
+    def __str__(self):
+        return f"MFA for {self.user.email}"
 
 
 class Organization(models.Model):

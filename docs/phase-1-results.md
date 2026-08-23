@@ -4,6 +4,8 @@ Date: 2026-07-31
 
 This document records the foundation checkpoint. The later roadmap modules are no longer deferred; see [full-build-status.md](full-build-status.md) for the current complete-build status.
 
+The production identity limitation recorded at this checkpoint was superseded by Project Hope 1.7's built-in TOTP two-step verification and recovery. Use the current build-status and production-deployment documents for present-day gates.
+
 ## Completed
 
 - Empty repository converted into a documented modular-monolith foundation.

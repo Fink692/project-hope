@@ -8,7 +8,8 @@ Project Hope is released only when the following gates are green:
 - [ ] Web tests and production build
 - [ ] Mobile frozen install and TypeScript check
 - [ ] Compose configuration validation and clean startup
-- [ ] HTTPS, strong secret, trusted hosts, CSRF origins, secure cookies, and MFA identity
+- [ ] HTTPS, separate Django/MFA secrets, trusted hosts, CSRF origins, secure cookies, shared Valkey cache, and required MFA enrollment
+- [ ] Clean-device browser/native MFA, one-time recovery-code, operator reset, and encryption-key rotation rehearsals
 - [ ] Backup restore test completed, including media and database
 - [ ] Retention preview reviewed; legal holds confirmed
 - [ ] Manual keyboard, screen-reader, reduced-motion, high-contrast, and mobile checks

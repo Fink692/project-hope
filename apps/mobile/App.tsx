@@ -4,6 +4,7 @@ import {
   Alert,
   FlatList,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   RefreshControl,
@@ -29,7 +30,12 @@ type Organization = { id: string; name: string; slug: string; status: string };
 type Session = {
   user: { email: string; display_name: string };
   organizations: Array<{ organization: Organization; role: string }>;
+  mfa?: MfaStatus;
+  workspaceAccessGranted?: boolean;
 };
+type MfaStatus = { enabled: boolean; required: boolean; enrollmentRequired: boolean; enabledAt: string | null; recoveryCodesRemaining: number };
+type MfaChallenge = { challenge: string; expiresInSeconds: number; methods: string[] };
+type MfaEnrollment = { enrollmentToken: string; formattedSecret: string; otpauthUri: string; expiresInSeconds: number };
 
 const modules: Module[] = [
   { id: "contacts", endpoint: "contacts", label: "People", description: "Contacts, consent, and follow-up", accent: "#d5e2d6" },
@@ -85,6 +91,9 @@ function LoginScreen({ baseUrl, onAuthenticated }: { baseUrl: string; onAuthenti
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [challenge, setChallenge] = useState<MfaChallenge | null>(null);
+  const [verificationCode, setVerificationCode] = useState("");
+  const [useRecoveryCode, setUseRecoveryCode] = useState(false);
 
   async function submit() {
     if (!email.trim() || !password) {
@@ -94,10 +103,16 @@ function LoginScreen({ baseUrl, onAuthenticated }: { baseUrl: string; onAuthenti
     setBusy(true);
     setError("");
     try {
-      const result = await apiRequest<{ token: string }>(baseUrl, "/auth/token/", undefined, {
+      const result = await apiRequest<{ token?: string; mfaRequired?: boolean; challenge?: string; expiresInSeconds?: number; methods?: string[] }>(baseUrl, "/auth/token/", undefined, {
         method: "POST",
         body: JSON.stringify({ email: email.trim(), password }),
       });
+      if (result.mfaRequired && result.challenge) {
+        setChallenge({ challenge: result.challenge, expiresInSeconds: result.expiresInSeconds ?? 300, methods: result.methods ?? ["totp", "recovery_code"] });
+        setPassword("");
+        return;
+      }
+      if (!result.token) throw new Error("The server did not issue a device credential.");
       await SecureStore.setItemAsync(AUTH_KEY, result.token);
       await onAuthenticated(result.token);
       setPassword("");
@@ -108,13 +123,60 @@ function LoginScreen({ baseUrl, onAuthenticated }: { baseUrl: string; onAuthenti
     }
   }
 
+  async function verifyChallenge() {
+    if (!challenge || !verificationCode.trim()) {
+      setError("Enter your authenticator or recovery code.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const result = await apiRequest<{ token: string; recoveryCodeUsed?: boolean }>(baseUrl, "/auth/mfa/challenge/", undefined, {
+        method: "POST",
+        body: JSON.stringify({ challenge: challenge.challenge, code: verificationCode.trim() }),
+      });
+      await SecureStore.setItemAsync(AUTH_KEY, result.token);
+      await onAuthenticated(result.token);
+      setChallenge(null);
+      setVerificationCode("");
+      if (result.recoveryCodeUsed) Alert.alert("Recovery code used", "That code cannot be used again. Create a replacement set from Account security when you can.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to verify this sign-in.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.safe}>
       <ScrollView contentContainerStyle={styles.loginContainer} keyboardShouldPersistTaps="handled">
         <Text style={styles.eyebrow}>PROJECT HOPE · FIELD WORKSPACE</Text>
-        <Text style={styles.title}>Good work starts with a clear next step.</Text>
-        <Text style={styles.body}>Sign in to access the minimum organization-scoped information needed in the field.</Text>
+        <Text style={styles.title}>{challenge ? "Confirm it’s you." : "Good work starts with a clear next step."}</Text>
+        <Text style={styles.body}>{challenge ? "Use the current code from your authenticator app. The private sign-in challenge expires in about " + Math.max(1, Math.round(challenge.expiresInSeconds / 60)) + " minutes." : "Sign in to access the minimum organization-scoped information needed in the field."}</Text>
         <View style={styles.formCard}>
+          {challenge ? <>
+          <Text style={styles.label}>{useRecoveryCode ? "Recovery code" : "Authenticator code"}</Text>
+          <TextInput
+            accessibilityLabel={useRecoveryCode ? "Recovery code" : "Authenticator code"}
+            autoCapitalize={useRecoveryCode ? "characters" : "none"}
+            autoComplete="sms-otp"
+            keyboardType={useRecoveryCode ? "default" : "number-pad"}
+            maxLength={useRecoveryCode ? 16 : 6}
+            onChangeText={setVerificationCode}
+            onSubmitEditing={verifyChallenge}
+            placeholder={useRecoveryCode ? "XXXXX-XXXXX" : "000000"}
+            placeholderTextColor="#87928b"
+            style={styles.input}
+            textContentType="oneTimeCode"
+            value={verificationCode}
+          />
+          {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
+          <Pressable accessibilityLabel={busy ? "Verifying" : "Verify and sign in"} accessibilityRole="button" accessibilityState={{ busy, disabled: busy }} disabled={busy} onPress={verifyChallenge} style={styles.primaryButton}>
+            {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>Verify and sign in</Text>}
+          </Pressable>
+          <Pressable accessibilityRole="button" disabled={busy} onPress={() => { setUseRecoveryCode(!useRecoveryCode); setVerificationCode(""); setError(""); }} style={styles.secondaryButton}><Text style={styles.secondaryButtonText}>{useRecoveryCode ? "Use authenticator code" : "Use a recovery code"}</Text></Pressable>
+          <Pressable accessibilityRole="button" disabled={busy} onPress={() => { setChallenge(null); setVerificationCode(""); setError(""); }} style={styles.linkButton}><Text style={styles.linkButtonText}>Back to password sign-in</Text></Pressable>
+          </> : <>
           <Text style={styles.label}>Work email</Text>
           <TextInput
             accessibilityLabel="Work email"
@@ -144,10 +206,113 @@ function LoginScreen({ baseUrl, onAuthenticated }: { baseUrl: string; onAuthenti
           <Pressable accessibilityLabel={busy ? "Signing in" : "Sign in securely"} accessibilityRole="button" accessibilityState={{ busy, disabled: busy }} disabled={busy} onPress={submit} style={styles.primaryButton}>
             {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>Sign in securely</Text>}
           </Pressable>
+          </>}
         </View>
         <Text style={styles.caption}>Your access token is stored in secure device storage. Sign out to revoke it.</Text>
       </ScrollView>
     </KeyboardAvoidingView>
+  );
+}
+
+function MfaEnrollmentScreen({ baseUrl, token, onCompleted, onSignOut }: { baseUrl: string; token: string; onCompleted: () => Promise<void>; onSignOut: () => Promise<void> }) {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [code, setCode] = useState("");
+  const [enrollment, setEnrollment] = useState<MfaEnrollment | null>(null);
+  const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function begin() {
+    if (!currentPassword) {
+      setError("Enter your current password.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const result = await apiRequest<MfaEnrollment>(baseUrl, "/auth/mfa/enrollment/", token, {
+        method: "POST",
+        body: JSON.stringify({ current_password: currentPassword }),
+      });
+      setEnrollment(result);
+      setCode("");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to start account protection.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function openAuthenticator() {
+    if (!enrollment) return;
+    try {
+      await Linking.openURL(enrollment.otpauthUri);
+    } catch {
+      setError("No authenticator app accepted the setup link. Enter the displayed key manually in your authenticator app.");
+    }
+  }
+
+  async function confirm() {
+    if (!enrollment || !/^\d{6}$/.test(code)) {
+      setError("Enter the current six-digit code from your authenticator app.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const result = await apiRequest<{ recoveryCodes: string[] }>(baseUrl, "/auth/mfa/enrollment/confirm/", token, {
+        method: "POST",
+        body: JSON.stringify({ enrollment_token: enrollment.enrollmentToken, code }),
+      });
+      setEnrollment(null);
+      setCurrentPassword("");
+      setCode("");
+      setRecoveryCodes(result.recoveryCodes);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to verify this authenticator.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <SafeAreaView style={styles.safe}>
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.safe}>
+        <ScrollView contentContainerStyle={styles.loginContainer} keyboardShouldPersistTaps="handled">
+          <Text style={styles.eyebrow}>ACCOUNT PROTECTION</Text>
+          <Text style={styles.title}>{recoveryCodes.length ? "Save your recovery codes." : "Protect your workspace."}</Text>
+          {recoveryCodes.length ? <>
+            <Text style={styles.body}>Each code works once if your authenticator is unavailable. Store them in a password manager or another private place. Project Hope cannot show them again.</Text>
+            <View accessibilityLabel="One-time recovery codes" style={styles.recoveryCard}>
+              {recoveryCodes.map((recoveryCode) => <Text key={recoveryCode} selectable style={styles.recoveryCode}>{recoveryCode}</Text>)}
+            </View>
+            <Pressable accessibilityRole="button" onPress={() => void onCompleted()} style={styles.primaryButton}><Text style={styles.primaryButtonText}>I saved them · sign in again</Text></Pressable>
+          </> : enrollment ? <>
+            <Text style={styles.body}>Open the setup link in your authenticator app. If it does not open, add an account manually with the private key below.</Text>
+            <View style={styles.formCard}>
+              <Pressable accessibilityRole="button" onPress={() => void openAuthenticator()} style={styles.primaryButton}><Text style={styles.primaryButtonText}>Open authenticator app</Text></Pressable>
+              <Text style={styles.label}>Manual setup key</Text>
+              <Text accessibilityLabel="Manual authenticator setup key" selectable style={styles.manualKey}>{enrollment.formattedSecret}</Text>
+              <Text style={styles.caption}>Treat this key like a password. Setup expires in about {Math.max(1, Math.round(enrollment.expiresInSeconds / 60))} minutes.</Text>
+              <Text style={styles.label}>Six-digit authenticator code</Text>
+              <TextInput accessibilityLabel="Six-digit authenticator code" autoComplete="sms-otp" keyboardType="number-pad" maxLength={6} onChangeText={setCode} onSubmitEditing={confirm} placeholder="000000" placeholderTextColor="#87928b" style={styles.input} textContentType="oneTimeCode" value={code} />
+              {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
+              <Pressable accessibilityRole="button" accessibilityState={{ busy, disabled: busy }} disabled={busy} onPress={confirm} style={styles.primaryButton}>{busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>Verify and turn on</Text>}</Pressable>
+              <Pressable accessibilityRole="button" disabled={busy} onPress={() => { setEnrollment(null); setCode(""); setError(""); }} style={styles.secondaryButton}><Text style={styles.secondaryButtonText}>Start over</Text></Pressable>
+            </View>
+          </> : <>
+            <Text style={styles.body}>Your organization requires two-step verification before its data can open. You can use any standards-based authenticator app.</Text>
+            <View style={styles.formCard}>
+              <Text style={styles.label}>Current password</Text>
+              <TextInput accessibilityLabel="Current password" autoCapitalize="none" autoComplete="current-password" onChangeText={setCurrentPassword} onSubmitEditing={begin} placeholder="Your password" placeholderTextColor="#87928b" secureTextEntry style={styles.input} value={currentPassword} />
+              {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
+              <Pressable accessibilityRole="button" accessibilityState={{ busy, disabled: busy }} disabled={busy} onPress={begin} style={styles.primaryButton}>{busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>Set up two-step verification</Text>}</Pressable>
+              <Pressable accessibilityRole="button" disabled={busy} onPress={() => void onSignOut()} style={styles.linkButton}><Text style={styles.linkButtonText}>Sign out</Text></Pressable>
+            </View>
+          </>}
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
@@ -356,6 +521,13 @@ export default function App() {
     Alert.alert("Signed out", "This device no longer has access to the workspace.");
   }
 
+  async function finishMfaEnrollment() {
+    await SecureStore.deleteItemAsync(AUTH_KEY);
+    setToken(null);
+    setSession(null);
+    Alert.alert("Account protected", "Two-step verification is on. Sign in again with your new authenticator code.");
+  }
+
   if (!baseUrl) {
     return <><StatusBar style="dark" /><ConfigurationRequired /></>;
   }
@@ -364,6 +536,9 @@ export default function App() {
   }
   if (!token || !session) {
     return <><StatusBar style="dark" /><LoginScreen baseUrl={baseUrl} onAuthenticated={loadSession} /></>;
+  }
+  if (session.mfa?.enrollmentRequired) {
+    return <><StatusBar style="dark" /><MfaEnrollmentScreen baseUrl={baseUrl} onCompleted={finishMfaEnrollment} onSignOut={signOut} token={token} /></>;
   }
   return <><StatusBar style="dark" /><Workspace baseUrl={baseUrl} online={online} onSignOut={signOut} session={session} token={token} /></>;
 }
@@ -387,6 +562,11 @@ const styles = StyleSheet.create({
   primaryButtonText: { color: "#fff", fontSize: 15, fontWeight: "800" },
   secondaryButton: { alignItems: "center", alignSelf: "flex-start", borderColor: "#1f5148", borderRadius: 22, borderWidth: 1, marginTop: 14, minHeight: 42, paddingHorizontal: 16, paddingVertical: 10 },
   secondaryButtonText: { color: "#1f5148", fontSize: 14, fontWeight: "800" },
+  linkButton: { alignItems: "center", marginTop: 16, minHeight: 40, paddingVertical: 10 },
+  linkButtonText: { color: "#1f5148", fontSize: 14, fontWeight: "800", textDecorationLine: "underline" },
+  manualKey: { backgroundColor: "#e7efe9", borderRadius: 8, color: "#1f5148", fontFamily: Platform.select({ ios: "Menlo", android: "monospace", default: "monospace" }), fontSize: 15, letterSpacing: 1.2, lineHeight: 24, marginBottom: 10, padding: 12 },
+  recoveryCard: { backgroundColor: "#fbfaf7", borderColor: "#6e9a88", borderRadius: 18, borderWidth: 2, gap: 8, marginTop: 22, padding: 18 },
+  recoveryCode: { color: "#1f5148", fontFamily: Platform.select({ ios: "Menlo", android: "monospace", default: "monospace" }), fontSize: 17, fontWeight: "700", letterSpacing: 1.1, paddingVertical: 4, textAlign: "center" },
   statusPill: { alignItems: "center", alignSelf: "flex-start", backgroundColor: "#fbfaf7", borderColor: "#d9d7cf", borderRadius: 20, borderWidth: 1, flexDirection: "row", gap: 8, marginBottom: 4, paddingHorizontal: 12, paddingVertical: 9 },
   statusDot: { borderRadius: 6, height: 10, width: 10 },
   good: { backgroundColor: "#3c9b67" },

@@ -47,6 +47,7 @@ The equivalent authenticated endpoint is `GET /api/v1/pilot-applications/metrics
 - Deploy the production topology behind a real HTTPS domain.
 - Set `PROJECT_HOPE_PUBLIC_URL` to that exact public origin.
 - Configure an authenticated transactional SMTP service and test delivery, confirmation, expiry, and spam placement.
+- Generate and back up the dedicated MFA encryption key; test first-owner enrollment, a clean-device challenge, one recovery code, and the approved operator-reset path.
 - Publish a monitored privacy/support contact and identify the deployment operator and service providers.
 - Run migration `identity.0002_pilotapplication` and confirm the worker is active.
 - Submit one synthetic application, confirm it, verify aggregate metrics, then remove the synthetic record before launch.

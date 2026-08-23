@@ -14,7 +14,7 @@ Prioritize a charity that:
 - accepts that AI output is optional, bounded, and reviewed by a person; and
 - can explain one concrete workflow it wants Project Hope to improve during the pilot.
 
-Do not position the first pilot as clinical software, emergency response, autonomous case management, or a replacement for safeguarding judgment. High-sensitivity beneficiary data stays out until the deployment's MFA/access-gateway, privacy, backup, restore, retention, and incident-response gates are complete.
+Do not position the first pilot as clinical software, emergency response, autonomous case management, or a replacement for safeguarding judgment. High-sensitivity beneficiary data stays out until the deployment's built-in MFA/recovery, privacy, backup, restore, retention, and incident-response gates are complete.
 
 ## Permission-first channels
 
@@ -37,20 +37,20 @@ Contact the network or organization through its official public route and ask wh
 
 Hello [name/team],
 
-After a long period of building and testing, I’ve released Project Hope 1.6—a connected workspace for charity contacts, volunteers, programs, documents, grants, communications, impact work, and carefully bounded AI.
+After a long period of building and testing, I’ve released Project Hope 1.7—a connected workspace for charity contacts, volunteers, programs, documents, grants, communications, impact work, and carefully bounded AI, now with built-in authenticator protection and recovery.
 
 I’m inviting ten charities into a hands-on Founding Partner pilot. I’m not asking for a member list or a mass introduction. Would you be willing to advise whether a short, opt-in invitation belongs in one of your member, newsletter, or learning channels?
 
 There is no fee or card required to apply. A managed workspace is CAD $149/month only after it is live and responsibilities are agreed in writing.
 
-Release: https://github.com/Fink692/project-hope/releases/tag/v1.6.0
+Release: https://github.com/Fink692/project-hope/releases/tag/v1.7.0
 
 Thank you,
 [name]
 
 ## Warm introduction message
 
-Hi [name]—I’ve finally released Project Hope 1.6 after a long build. It gives charities one connected place for contacts, volunteers, programs, documents, grants, communications, and impact work, with optional human-reviewed AI. I’m looking for ten charities willing to test it honestly. Would [organization] be open to a 15-minute fit conversation, or is there someone appropriate you would feel comfortable introducing me to? No beneficiary or client information is needed.
+Hi [name]—I’ve finally released Project Hope 1.7 after a long build. It gives charities one connected place for contacts, volunteers, programs, documents, grants, communications, and impact work, with built-in two-step protection and optional human-reviewed AI. I’m looking for ten charities willing to test it honestly. Would [organization] be open to a 15-minute fit conversation, or is there someone appropriate you would feel comfortable introducing me to? No beneficiary or client information is needed.
 
 ## Three-day follow-up
 
@@ -58,7 +58,7 @@ Hi [name]—just bringing this back to the top of your inbox. I’m keeping the 
 
 ## Seven-day close-the-loop message
 
-Hi [name]—I’ll close the loop after this note so I don’t add noise to your inbox. If simplifying [their stated workflow] becomes a priority later, I would be glad to reconnect. The public release remains here: https://github.com/Fink692/project-hope/releases/tag/v1.6.0
+Hi [name]—I’ll close the loop after this note so I don’t add noise to your inbox. If simplifying [their stated workflow] becomes a priority later, I would be glad to reconnect. The public release remains here: https://github.com/Fink692/project-hope/releases/tag/v1.7.0
 
 ## Fifteen-minute fit conversation
 

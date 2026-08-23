@@ -48,7 +48,7 @@ Open `http://localhost:8090` (or set `HOPE_HTTP_PORT`). Django admin is at `/adm
 
 ## Production cautions
 
-Do not load real charity data into the default development stack. Production requires HTTPS, secure cookies, a strong secret, trusted host configuration, Keycloak/MFA, encrypted disks and backups, restricted database exposure, secret rotation, monitoring, backup restore tests, and a documented incident process.
+Do not load real charity data into the default development stack. Production requires HTTPS, secure cookies, separate strong Django and MFA-encryption secrets, trusted host configuration, a shared Valkey security cache, required built-in MFA enrollment, encrypted disks and backups, restricted database exposure, secret rotation, monitoring, backup/restore and MFA-recovery tests, and a documented incident process. OIDC/Keycloak remains optional SSO integration work.
 
 ## Background workers and privacy operations
 

@@ -38,8 +38,8 @@ def validate_post() -> int:
         )
     if "**" in post:
         raise SystemExit("LinkedIn post body contains Markdown bold markers")
-    if "https://github.com/Fink692/project-hope/releases/tag/v1.6.0" not in post:
-        raise SystemExit("LinkedIn post does not point to the verified v1.6.0 release")
+    if "https://github.com/Fink692/project-hope/releases/tag/v1.7.0" not in post:
+        raise SystemExit("LinkedIn post does not point to the v1.7.0 release")
     if "FOUNDING 10" not in post:
         raise SystemExit("LinkedIn post is missing the private Founding 10 call to action")
     return length

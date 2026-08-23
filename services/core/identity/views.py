@@ -14,7 +14,7 @@ from django.utils.decorators import method_decorator
 from rest_framework import status
 from rest_framework.authentication import BaseAuthentication, SessionAuthentication
 from rest_framework.authtoken.models import Token
-from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
@@ -30,11 +30,31 @@ from .invitations import (
 )
 from .models import (
     Membership,
+    MultiFactorCredential,
     Organization,
     OrganizationInvitation,
     PasswordResetDelivery,
     PilotApplication,
     User,
+)
+from .mfa import (
+    InvalidMfaChallenge,
+    InvalidMfaCode,
+    InvalidMfaEnrollment,
+    MfaAlreadyEnabled,
+    MfaNotEnabled,
+    MfaSecretUnavailable,
+    begin_enrollment,
+    confirm_enrollment,
+    consume_mfa_code,
+    disable_mfa,
+    issue_login_challenge,
+    mfa_status,
+    regenerate_recovery_codes,
+    release_login_challenge,
+    reserve_login_challenge,
+    set_session_security,
+    user_from_login_challenge,
 )
 from .pilot import (
     PILOT_VERIFICATION_SALT,
@@ -42,7 +62,13 @@ from .pilot import (
     verification_email_due,
 )
 from .passwords import password_reset_user, queue_password_reset
-from .permissions import active_membership, require_admin, require_membership
+from .permissions import (
+    IsAdminAndMfaCompliant,
+    IsAuthenticatedAndMfaCompliant,
+    active_membership,
+    require_admin,
+    require_membership,
+)
 from .serializers import (
     AcceptOrganizationInvitationSerializer,
     AddMembershipSerializer,
@@ -50,6 +76,10 @@ from .serializers import (
     CreateOrganizationSerializer,
     InvitationTokenSerializer,
     LoginSerializer,
+    MfaChallengeSerializer,
+    MfaEnrollmentBeginSerializer,
+    MfaEnrollmentConfirmSerializer,
+    MfaStepUpSerializer,
     MembershipSerializer,
     OrganizationInvitationSerializer,
     OrganizationSerializer,
@@ -61,7 +91,7 @@ from .serializers import (
     UpdateMembershipSerializer,
     UserSummarySerializer,
 )
-from .throttles import LoginAccountRateThrottle
+from .throttles import LoginAccountRateThrottle, MfaChallengeRateThrottle
 
 
 def scoped_organization(request, slug):
@@ -79,6 +109,37 @@ def scoped_organization(request, slug):
 
 def current_membership(request, organization):
     return active_membership(request.user, organization)
+
+
+def no_store(response):
+    response["Cache-Control"] = "no-store"
+    response["Pragma"] = "no-cache"
+    return response
+
+
+def mfa_login_challenge(user, mode, request):
+    AuditEvent.objects.record(
+        action="auth.mfa_challenge_issued",
+        actor=user,
+        event_type="authentication",
+        resource_type="user",
+        resource_id=user.id,
+        metadata={"mode": mode},
+        request=request,
+    )
+    return no_store(
+        Response(
+            {
+                "mfaRequired": True,
+                "challenge": issue_login_challenge(user, mode),
+                "expiresInSeconds": (
+                    settings.PROJECT_HOPE_MFA_LOGIN_CHALLENGE_MAX_AGE_SECONDS
+                ),
+                "methods": ["totp", "recovery_code"],
+            },
+            status=status.HTTP_202_ACCEPTED,
+        )
+    )
 
 
 class InvalidInvitation(Exception):
@@ -212,7 +273,7 @@ class PilotVerificationView(APIView):
 
 
 class PilotMetricsView(APIView):
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAdminAndMfaCompliant]
 
     def get(self, request):
         applications = PilotApplication.objects.all()
@@ -395,6 +456,7 @@ class InvitationAcceptView(APIView):
                 user,
                 backend="django.contrib.auth.backends.ModelBackend",
             )
+            set_session_security(request, user, mfa_verified=False)
             signed_in = True
         return Response(
             {
@@ -501,7 +563,8 @@ class PasswordResetConfirmView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             user.set_password(serializer.validated_data["password"])
-            user.save(update_fields=["password"])
+            user.security_version += 1
+            user.save(update_fields=["password", "security_version"])
             Token.objects.filter(user=user).delete()
             PasswordResetDelivery.objects.filter(
                 user=user, status=PasswordResetDelivery.Status.PENDING
@@ -530,6 +593,7 @@ class PasswordResetConfirmView(APIView):
 
 
 class LoginView(APIView):
+    authentication_classes: list[type[BaseAuthentication]] = []
     permission_classes = [AllowAny]
     throttle_classes = [LoginAccountRateThrottle, ScopedRateThrottle]
     throttle_scope = "auth_login_ip"
@@ -548,14 +612,24 @@ class LoginView(APIView):
                 {"detail": "Invalid credentials."}, status=status.HTTP_400_BAD_REQUEST
             )
 
+        if MultiFactorCredential.objects.filter(user=user).exists():
+            return mfa_login_challenge(user, "session", request)
         login(request, user)
+        set_session_security(request, user, mfa_verified=False)
         AuditEvent.objects.record(
             action="auth.login",
             actor=user,
             event_type="authentication",
             request=request,
         )
-        return Response({"user": UserSummarySerializer(user).data})
+        return no_store(
+            Response(
+                {
+                    "user": UserSummarySerializer(user).data,
+                    "mfa": mfa_status(user),
+                }
+            )
+        )
 
 
 class TokenLoginView(APIView):
@@ -577,6 +651,8 @@ class TokenLoginView(APIView):
                 {"detail": "Invalid credentials."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        if MultiFactorCredential.objects.filter(user=user).exists():
+            return mfa_login_challenge(user, "token", request)
         token, _ = Token.objects.get_or_create(user=user)
         if token_is_expired(token):
             token.delete()
@@ -589,7 +665,355 @@ class TokenLoginView(APIView):
             resource_id=user.id,
             request=request,
         )
-        return Response({"user": UserSummarySerializer(user).data, "token": token.key})
+        return no_store(
+            Response(
+                {
+                    "user": UserSummarySerializer(user).data,
+                    "token": token.key,
+                    "mfa": mfa_status(user),
+                }
+            )
+        )
+
+
+class MfaChallengeView(APIView):
+    authentication_classes: list[type[BaseAuthentication]] = []
+    permission_classes = [AllowAny]
+    throttle_classes = [MfaChallengeRateThrottle, ScopedRateThrottle]
+    throttle_scope = "auth_mfa_challenge"
+
+    def post(self, request):
+        serializer = MfaChallengeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            user, mode = user_from_login_challenge(
+                serializer.validated_data["challenge"]
+            )
+        except InvalidMfaChallenge:
+            return no_store(
+                Response(
+                    {"detail": "This sign-in challenge is invalid or has expired."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            )
+
+        if mode == "session":
+            SessionAuthentication().enforce_csrf(request)
+        try:
+            reservation_key = reserve_login_challenge(
+                serializer.validated_data["challenge"]
+            )
+        except InvalidMfaChallenge:
+            AuditEvent.objects.record(
+                action="auth.mfa_challenge_failed",
+                actor=user,
+                event_type="authentication",
+                resource_type="user",
+                resource_id=user.id,
+                metadata={"reason": "already_used"},
+                request=request,
+            )
+            return no_store(
+                Response(
+                    {"detail": "This sign-in challenge is invalid or has expired."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            )
+        try:
+            verified = consume_mfa_code(user, serializer.validated_data["code"])
+        except InvalidMfaCode:
+            release_login_challenge(reservation_key)
+            AuditEvent.objects.record(
+                action="auth.mfa_challenge_failed",
+                actor=user,
+                event_type="authentication",
+                resource_type="user",
+                resource_id=user.id,
+                request=request,
+            )
+            return no_store(
+                Response(
+                    {"detail": "That verification code was not accepted."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            )
+        except (MfaNotEnabled, MfaSecretUnavailable):
+            release_login_challenge(reservation_key)
+            return no_store(
+                Response(
+                    {
+                        "detail": (
+                            "Two-step verification is unavailable. Contact your "
+                            "Project Hope operator."
+                        )
+                    },
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
+            )
+
+        payload = {
+            "user": UserSummarySerializer(user).data,
+            "mfa": mfa_status(user),
+            "recoveryCodeUsed": verified.method == "recovery_code",
+        }
+        if mode == "session":
+            login(request, user)
+            set_session_security(request, user, mfa_verified=True)
+            action = "auth.login"
+        else:
+            token, _ = Token.objects.get_or_create(user=user)
+            if token_is_expired(token):
+                token.delete()
+                token = Token.objects.create(user=user)
+            payload["token"] = token.key
+            action = "auth.token_issued"
+        AuditEvent.objects.record(
+            action="auth.mfa_verified",
+            actor=user,
+            event_type="authentication",
+            resource_type="user",
+            resource_id=user.id,
+            metadata={"mode": mode, "method": verified.method},
+            request=request,
+        )
+        AuditEvent.objects.record(
+            action=action,
+            actor=user,
+            event_type="authentication",
+            resource_type="user",
+            resource_id=user.id,
+            metadata={"mfa": True},
+            request=request,
+        )
+        return no_store(Response(payload))
+
+
+class MfaStatusView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return no_store(Response(mfa_status(request.user)))
+
+
+class MfaEnrollmentView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth_mfa_enrollment"
+
+    def post(self, request):
+        serializer = MfaEnrollmentBeginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        if not request.user.check_password(
+            serializer.validated_data["current_password"]
+        ):
+            return no_store(
+                Response(
+                    {"detail": "Current password was not accepted."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            )
+        try:
+            enrollment = begin_enrollment(request.user)
+        except MfaAlreadyEnabled:
+            return no_store(
+                Response(
+                    {"detail": "Two-step verification is already enabled."},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            )
+        AuditEvent.objects.record(
+            action="auth.mfa_enrollment_started",
+            actor=request.user,
+            event_type="authentication",
+            resource_type="user",
+            resource_id=request.user.id,
+            request=request,
+        )
+        return no_store(Response(enrollment))
+
+
+class MfaEnrollmentConfirmView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth_mfa_enrollment"
+
+    def post(self, request):
+        serializer = MfaEnrollmentConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            credential, recovery_codes = confirm_enrollment(
+                request.user,
+                serializer.validated_data["enrollment_token"],
+                serializer.validated_data["code"],
+            )
+        except InvalidMfaCode:
+            return no_store(
+                Response(
+                    {"detail": "That authenticator code was not accepted."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            )
+        except InvalidMfaEnrollment:
+            return no_store(
+                Response(
+                    {"detail": "This setup has expired. Start again."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            )
+        except MfaAlreadyEnabled:
+            return no_store(
+                Response(
+                    {"detail": "Two-step verification is already enabled."},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            )
+
+        token_authenticated = isinstance(request.auth, Token)
+        if not token_authenticated:
+            set_session_security(request, request.user, mfa_verified=True)
+        AuditEvent.objects.record(
+            action="auth.mfa_enabled",
+            actor=request.user,
+            event_type="authentication",
+            resource_type="multi_factor_credential",
+            resource_id=credential.id,
+            metadata={"recovery_code_count": len(recovery_codes)},
+            request=request,
+        )
+        return no_store(
+            Response(
+                {
+                    "detail": "Two-step verification is enabled.",
+                    "recoveryCodes": recovery_codes,
+                    "mfa": mfa_status(request.user),
+                    "reauthenticationRequired": token_authenticated,
+                },
+                status=status.HTTP_201_CREATED,
+            )
+        )
+
+
+class MfaRecoveryCodesView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth_mfa_enrollment"
+
+    def post(self, request):
+        serializer = MfaStepUpSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        if not request.user.check_password(
+            serializer.validated_data["current_password"]
+        ):
+            return no_store(
+                Response(
+                    {
+                        "detail": "Current password or verification code was not accepted."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            )
+        try:
+            credential, recovery_codes, method = regenerate_recovery_codes(
+                request.user, serializer.validated_data["code"]
+            )
+        except InvalidMfaCode:
+            return no_store(
+                Response(
+                    {
+                        "detail": "Current password or verification code was not accepted."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            )
+        except (MfaNotEnabled, MfaSecretUnavailable):
+            return no_store(
+                Response(
+                    {"detail": "Two-step verification is not available."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            )
+        token_authenticated = isinstance(request.auth, Token)
+        if not token_authenticated:
+            set_session_security(request, request.user, mfa_verified=True)
+        AuditEvent.objects.record(
+            action="auth.mfa_recovery_codes_regenerated",
+            actor=request.user,
+            event_type="authentication",
+            resource_type="multi_factor_credential",
+            resource_id=credential.id,
+            metadata={"verification_method": method},
+            request=request,
+        )
+        return no_store(
+            Response(
+                {
+                    "detail": "New recovery codes created. Earlier codes no longer work.",
+                    "recoveryCodes": recovery_codes,
+                    "mfa": mfa_status(request.user),
+                    "reauthenticationRequired": token_authenticated,
+                }
+            )
+        )
+
+
+class MfaDisableView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth_mfa_enrollment"
+
+    def post(self, request):
+        serializer = MfaStepUpSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        if not request.user.check_password(
+            serializer.validated_data["current_password"]
+        ):
+            return no_store(
+                Response(
+                    {
+                        "detail": "Current password or verification code was not accepted."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            )
+        try:
+            method = disable_mfa(request.user, serializer.validated_data["code"])
+        except InvalidMfaCode:
+            return no_store(
+                Response(
+                    {
+                        "detail": "Current password or verification code was not accepted."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            )
+        except (MfaNotEnabled, MfaSecretUnavailable):
+            return no_store(
+                Response(
+                    {"detail": "Two-step verification is not available."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            )
+        token_authenticated = isinstance(request.auth, Token)
+        if not token_authenticated:
+            set_session_security(request, request.user, mfa_verified=False)
+        AuditEvent.objects.record(
+            action="auth.mfa_disabled",
+            actor=request.user,
+            event_type="authentication",
+            resource_type="user",
+            resource_id=request.user.id,
+            metadata={"verification_method": method},
+            request=request,
+        )
+        return no_store(
+            Response(
+                {
+                    "detail": "Two-step verification is disabled.",
+                    "mfa": mfa_status(request.user),
+                    "reauthenticationRequired": token_authenticated,
+                }
+            )
+        )
 
 
 class LogoutView(APIView):
@@ -612,14 +1036,19 @@ class MeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        memberships = (
-            Membership.objects.select_related("organization")
-            .filter(user=request.user, active=True)
-            .order_by("organization__name")
-        )
+        current_mfa = mfa_status(request.user)
+        memberships = []
+        if not current_mfa["enrollmentRequired"]:
+            memberships = list(
+                Membership.objects.select_related("organization")
+                .filter(user=request.user, active=True)
+                .order_by("organization__name")
+            )
         return Response(
             {
                 "user": UserSummarySerializer(request.user).data,
+                "mfa": current_mfa,
+                "workspaceAccessGranted": not current_mfa["enrollmentRequired"],
                 "organizations": [
                     {
                         "organization": OrganizationSerializer(
@@ -635,7 +1064,7 @@ class MeView(APIView):
 
 
 class OrganizationListCreateView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticatedAndMfaCompliant]
 
     def get(self, request):
         organizations = (
@@ -694,7 +1123,7 @@ class OrganizationListCreateView(APIView):
 
 
 class OrganizationDetailView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticatedAndMfaCompliant]
 
     def get(self, request, slug):
         organization = scoped_organization(request, slug)
@@ -740,7 +1169,7 @@ class OrganizationDetailView(APIView):
 
 
 class OrganizationInvitationListCreateView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticatedAndMfaCompliant]
 
     def get(self, request, slug):
         organization = scoped_organization(request, slug)
@@ -801,7 +1230,7 @@ class OrganizationInvitationListCreateView(APIView):
 
 
 class OrganizationInvitationDetailView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticatedAndMfaCompliant]
 
     def delete(self, request, slug, invitation_id):
         organization = scoped_organization(request, slug)
@@ -851,7 +1280,7 @@ class OrganizationInvitationDetailView(APIView):
 
 
 class OrganizationInvitationResendView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticatedAndMfaCompliant]
 
     def post(self, request, slug, invitation_id):
         organization = scoped_organization(request, slug)
@@ -912,7 +1341,7 @@ class OrganizationInvitationResendView(APIView):
 
 
 class MembershipListView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticatedAndMfaCompliant]
 
     def get(self, request, slug):
         organization = scoped_organization(request, slug)
@@ -959,7 +1388,7 @@ class MembershipListView(APIView):
 
 
 class MembershipDetailView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticatedAndMfaCompliant]
 
     @transaction.atomic
     def patch(self, request, slug, membership_id):
@@ -1042,7 +1471,7 @@ class MembershipDetailView(APIView):
 
 
 class AuditEventListView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticatedAndMfaCompliant]
 
     def get(self, request, slug):
         organization = scoped_organization(request, slug)

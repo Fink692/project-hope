@@ -15,3 +15,6 @@ Phase 1 uses Django’s hardened password hashing and session authentication for
 
 The first milestone is easy to run and test, but local password auth is not the production identity posture. Production deployment must add Keycloak/OIDC, MFA, short privileged sessions, recovery codes, and removal/rotation of demo credentials before real sensitive data is loaded.
 
+## 2026-08-23 amendment
+
+Version 1.7 adds application-level TOTP enrollment and challenge verification, one-time recovery codes, encrypted/rotatable MFA secrets, and password/MFA security-version revocation for sessions and native tokens. Production requires this built-in factor and a shared security cache. Keycloak/OIDC is now an optional federation path for organizations that need SSO; independent authorization review, privileged-session policy, phishing-resistant factors, and removal/rotation of demo credentials remain production gates.

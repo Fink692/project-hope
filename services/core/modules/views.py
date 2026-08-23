@@ -23,13 +23,16 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from audit.models import AuditEvent
 from identity.models import Membership, Organization
-from identity.permissions import active_membership, require_admin
+from identity.permissions import (
+    IsAuthenticatedAndMfaCompliant,
+    active_membership,
+    require_admin,
+)
 
 from .models import (
     AIModelRegistry,
@@ -105,7 +108,7 @@ def audit(
 
 
 class TenantView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticatedAndMfaCompliant]
     parser_classes = [JSONParser, MultiPartParser, FormParser]
     model = None
 

@@ -44,6 +44,7 @@ jobs:
           DJANGO_ENV: production
           DJANGO_DEBUG: "false"
           DJANGO_SECRET_KEY: ci-only-X8q2Vn9Lm4Rp7Ts6Wz1Yc5Ka9Hd3Fg8Jm2Qv6Bt7Ne4Px9Rc3Wy5Ua8Kz1Dh6Fs0Jv
+          PROJECT_HOPE_MFA_ENCRYPTION_KEYS: MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=
           DJANGO_ALLOWED_HOSTS: example.org
           DJANGO_TRUST_PROXY: "true"
           DJANGO_CSRF_TRUSTED_ORIGINS: https://example.org
@@ -51,6 +52,7 @@ jobs:
           SMTP_HOST: smtp.example.org
           SMTP_FROM: Project Hope <noreply@example.org>
           PROJECT_HOPE_PUBLIC_URL: https://example.org
+          VALKEY_URL: redis://localhost:6379/0
       - run: python manage.py makemigrations --check --dry-run
       - run: ruff check .
       - run: ruff format --check .
@@ -174,6 +176,7 @@ jobs:
     env:
       POSTGRES_PASSWORD: ci-postgres-password
       DJANGO_SECRET_KEY: ci-only-production-secret-with-sufficient-entropy-123456789
+      PROJECT_HOPE_MFA_ENCRYPTION_KEYS: MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=
       DJANGO_ALLOWED_HOSTS: example.org
       DJANGO_CSRF_TRUSTED_ORIGINS: https://example.org
       DATABASE_URL: postgresql://hope:ci-postgres-password@db:5432/hope

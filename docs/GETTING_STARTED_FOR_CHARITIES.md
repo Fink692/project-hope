@@ -80,6 +80,12 @@ If mail delivery is temporarily unavailable, Project Hope shows that delivery is
 
 If someone forgets a password, select **Forgot password?** on the sign-in screen. Project Hope gives the same immediate privacy-safe response for every address and, when an active account matches, the background worker emails a one-hour single-use reset link. Changing the password signs out existing sessions and revokes the account's API token.
 
+### Protect your account
+
+Real deployments require two-step verification before organization information opens. On first sign-in, **Account security** guides you to scan a private QR code with any standards-based authenticator app, confirm the current six-digit code, and save a one-time recovery-code set. The QR key and recovery codes should be treated like passwords; put the recovery set in a password manager or another private place, never a shared chat or public document.
+
+Future sign-ins ask for the current authenticator code after the password. If the authenticator is unavailable, choose **Use a recovery code**. Each recovery code works once. After using one, open **Account security** in the browser and create a replacement set. If both the authenticator and recovery set are unavailable, contact the designated Project Hope operator; support must verify identity under the charity's recovery procedure before resetting the factor.
+
 Native mobile/API sign-ins expire after 30 days by default. If the app asks someone to sign in again, this is expected token rotation; no organization data is deleted.
 - **Administrator:** use the production deployment guide before real data, public access, or staff-wide rollout.
 - **Support helper:** ask the coordinator to run `status` first. If needed, `logs` shows recent service information without changing data.

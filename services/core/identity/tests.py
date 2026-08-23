@@ -1,14 +1,18 @@
 import json
+import time
 from datetime import timedelta
 from io import StringIO
 from urllib.parse import parse_qs, urlparse
 from unittest.mock import patch
 
+import pyotp
+from cryptography.fernet import Fernet
 from django.conf import settings
 from django.core import mail
 from django.core.cache import cache
 from django.core import management
 from django.core.exceptions import ValidationError
+from django.core.management.base import CommandError
 from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.authtoken.models import Token
@@ -20,6 +24,7 @@ from audit.models import AuditEvent
 from .invitations import send_team_invitation
 from .models import (
     Membership,
+    MultiFactorCredential,
     Organization,
     OrganizationInvitation,
     PasswordResetDelivery,
@@ -236,6 +241,20 @@ class FoundationApiTests(TestCase):
         self.assertEqual(replacement.status_code, 200, replacement.content)
         self.assertNotEqual(replacement.json()["token"], expired.key)
 
+    def test_password_change_automatically_supersedes_sessions_and_tokens(self):
+        self.login()
+        token = Token.objects.create(user=self.alice)
+        self.alice.set_password("A-new-password-456")
+        self.alice.save(update_fields=["password"])
+        self.alice.refresh_from_db()
+        self.assertEqual(self.alice.security_version, 1)
+
+        token_client = APIClient()
+        token_client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+        self.assertEqual(token_client.get("/api/v1/me/").status_code, 401)
+        self.assertFalse(Token.objects.filter(key=token.key).exists())
+        self.assertIn(self.client.get("/api/v1/me/").status_code, (401, 403))
+
     def test_user_can_create_organization_and_becomes_owner(self):
         self.login()
 
@@ -373,6 +392,331 @@ class FoundationApiTests(TestCase):
             event.save()
         with self.assertRaises(ValidationError):
             event.delete()
+
+
+@override_settings(PROJECT_HOPE_MFA_REQUIRED=True)
+class MultiFactorAuthenticationApiTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        self.user = User.objects.create_user("owner@example.org", "Owner-password-123")
+        self.organization = Organization.objects.create(
+            name="Hope Demo", slug="hope-demo"
+        )
+        Membership.objects.create(
+            user=self.user,
+            organization=self.organization,
+            role=Membership.Role.OWNER,
+        )
+
+    def password_login(self, client=None, *, native=False):
+        selected_client = client or self.client
+        endpoint = "/api/v1/auth/token/" if native else "/api/v1/auth/login/"
+        return selected_client.post(
+            endpoint,
+            {"email": self.user.email, "password": "Owner-password-123"},
+            format="json",
+        )
+
+    def enroll(self, client=None):
+        selected_client = client or self.client
+        login_response = self.password_login(selected_client)
+        self.assertEqual(login_response.status_code, 200, login_response.content)
+        enrollment = selected_client.post(
+            "/api/v1/auth/mfa/enrollment/",
+            {"current_password": "Owner-password-123"},
+            format="json",
+        )
+        self.assertEqual(enrollment.status_code, 200, enrollment.content)
+        secret = enrollment.json()["secret"]
+        confirmation = selected_client.post(
+            "/api/v1/auth/mfa/enrollment/confirm/",
+            {
+                "enrollment_token": enrollment.json()["enrollmentToken"],
+                "code": pyotp.TOTP(secret).now(),
+            },
+            format="json",
+        )
+        self.assertEqual(confirmation.status_code, 201, confirmation.content)
+        return secret, confirmation.json()["recoveryCodes"]
+
+    def test_required_enrollment_is_blocking_encrypted_and_revokes_old_sessions(self):
+        second_session = APIClient()
+        self.assertEqual(self.password_login().status_code, 200)
+        self.assertEqual(self.password_login(second_session).status_code, 200)
+
+        before = self.client.get("/api/v1/organizations/")
+        self.assertEqual(before.status_code, 403)
+        before_session = self.client.get("/api/v1/me/").json()
+        self.assertTrue(before_session["mfa"]["enrollmentRequired"])
+        self.assertFalse(before_session["workspaceAccessGranted"])
+        self.assertEqual(before_session["organizations"], [])
+
+        wrong_password = self.client.post(
+            "/api/v1/auth/mfa/enrollment/",
+            {"current_password": "not-the-password"},
+            format="json",
+        )
+        self.assertEqual(wrong_password.status_code, 400)
+        enrollment = self.client.post(
+            "/api/v1/auth/mfa/enrollment/",
+            {"current_password": "Owner-password-123"},
+            format="json",
+        )
+        self.assertEqual(enrollment.status_code, 200, enrollment.content)
+        self.assertTrue(
+            enrollment.json()["qrCodeDataUrl"].startswith("data:image/svg+xml;base64,")
+        )
+        self.assertEqual(enrollment["Cache-Control"], "no-store")
+        secret = enrollment.json()["secret"]
+        self.assertFalse(MultiFactorCredential.objects.filter(user=self.user).exists())
+        old_token = Token.objects.create(user=self.user)
+
+        confirmation = self.client.post(
+            "/api/v1/auth/mfa/enrollment/confirm/",
+            {
+                "enrollment_token": enrollment.json()["enrollmentToken"],
+                "code": pyotp.TOTP(secret).now(),
+            },
+            format="json",
+        )
+        self.assertEqual(confirmation.status_code, 201, confirmation.content)
+        recovery_codes = confirmation.json()["recoveryCodes"]
+        self.assertEqual(len(recovery_codes), 10)
+        self.assertEqual(len(set(recovery_codes)), 10)
+        self.assertFalse(Token.objects.filter(key=old_token.key).exists())
+        credential = MultiFactorCredential.objects.get(user=self.user)
+        self.assertNotIn(secret, credential.encrypted_secret)
+        self.assertEqual(len(credential.recovery_code_hashes), 10)
+        self.assertNotIn(
+            recovery_codes[0].replace("-", ""), credential.recovery_code_hashes
+        )
+        self.assertEqual(self.client.get("/api/v1/organizations/").status_code, 200)
+        self.assertIn(second_session.get("/api/v1/me/").status_code, (401, 403))
+        self.assertEqual(self.password_login(second_session).status_code, 202)
+        self.assertTrue(
+            AuditEvent.objects.filter(
+                action="auth.mfa_enabled", actor=self.user
+            ).exists()
+        )
+
+    def test_browser_challenge_requires_csrf_and_is_single_use(self):
+        _, recovery_codes = self.enroll()
+        self.client.post("/api/v1/auth/logout/", {}, format="json")
+
+        csrf_client = APIClient(enforce_csrf_checks=True)
+        csrf_client.get("/api/v1/auth/csrf/")
+        csrf_token = csrf_client.cookies["csrftoken"].value
+        challenge_response = csrf_client.post(
+            "/api/v1/auth/login/",
+            {"email": self.user.email, "password": "Owner-password-123"},
+            format="json",
+            HTTP_X_CSRFTOKEN=csrf_token,
+        )
+        self.assertEqual(
+            challenge_response.status_code, 202, challenge_response.content
+        )
+        self.assertNotIn("sessionid", csrf_client.cookies)
+        challenge = challenge_response.json()["challenge"]
+        future = time.time() + 30
+        code = pyotp.TOTP(self.client_secret()).at(future)
+
+        without_csrf = csrf_client.post(
+            "/api/v1/auth/mfa/challenge/",
+            {"challenge": challenge, "code": code},
+            format="json",
+        )
+        self.assertEqual(without_csrf.status_code, 403)
+        with patch("identity.mfa.time.time", return_value=future):
+            accepted = csrf_client.post(
+                "/api/v1/auth/mfa/challenge/",
+                {"challenge": challenge, "code": code},
+                format="json",
+                HTTP_X_CSRFTOKEN=csrf_token,
+            )
+        self.assertEqual(accepted.status_code, 200, accepted.content)
+        self.assertEqual(csrf_client.get("/api/v1/organizations/").status_code, 200)
+
+        recovery_count = len(
+            MultiFactorCredential.objects.get(user=self.user).recovery_code_hashes
+        )
+        authenticated_csrf_token = csrf_client.cookies["csrftoken"].value
+        replay = csrf_client.post(
+            "/api/v1/auth/mfa/challenge/",
+            {"challenge": challenge, "code": recovery_codes[0]},
+            format="json",
+            HTTP_X_CSRFTOKEN=authenticated_csrf_token,
+        )
+        self.assertEqual(replay.status_code, 400)
+        self.assertIn("invalid or has expired", replay.json()["detail"])
+        self.assertEqual(
+            len(MultiFactorCredential.objects.get(user=self.user).recovery_code_hashes),
+            recovery_count,
+        )
+        self.assertTrue(
+            AuditEvent.objects.filter(action="auth.mfa_challenge_failed").exists()
+        )
+
+    def client_secret(self):
+        from .mfa import decrypt_secret
+
+        return decrypt_secret(
+            MultiFactorCredential.objects.get(user=self.user).encrypted_secret
+        )
+
+    def test_native_challenge_accepts_one_recovery_code_and_revokes_it(self):
+        _, recovery_codes = self.enroll()
+        self.client.post("/api/v1/auth/logout/", {}, format="json")
+        challenge_response = self.password_login(native=True)
+        self.assertEqual(
+            challenge_response.status_code, 202, challenge_response.content
+        )
+        challenge = challenge_response.json()["challenge"]
+        accepted = self.client.post(
+            "/api/v1/auth/mfa/challenge/",
+            {"challenge": challenge, "code": recovery_codes[0].lower()},
+            format="json",
+        )
+        self.assertEqual(accepted.status_code, 200, accepted.content)
+        self.assertTrue(accepted.json()["recoveryCodeUsed"])
+        token = accepted.json()["token"]
+        token_client = APIClient()
+        token_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+        self.assertEqual(token_client.get("/api/v1/me/").status_code, 200)
+        self.assertEqual(
+            len(MultiFactorCredential.objects.get(user=self.user).recovery_code_hashes),
+            9,
+        )
+
+        next_challenge = self.password_login(APIClient(), native=True).json()[
+            "challenge"
+        ]
+        reused = APIClient().post(
+            "/api/v1/auth/mfa/challenge/",
+            {"challenge": next_challenge, "code": recovery_codes[0]},
+            format="json",
+        )
+        self.assertEqual(reused.status_code, 400)
+
+    def test_recovery_regeneration_and_disable_revoke_native_tokens(self):
+        _, old_codes = self.enroll()
+        old_token = Token.objects.create(user=self.user)
+        regenerated = self.client.post(
+            "/api/v1/auth/mfa/recovery-codes/",
+            {
+                "current_password": "Owner-password-123",
+                "code": old_codes[0],
+            },
+            format="json",
+        )
+        self.assertEqual(regenerated.status_code, 200, regenerated.content)
+        new_codes = regenerated.json()["recoveryCodes"]
+        self.assertEqual(len(new_codes), 10)
+        self.assertFalse(Token.objects.filter(key=old_token.key).exists())
+        self.assertEqual(self.client.get("/api/v1/organizations/").status_code, 200)
+
+        disabled = self.client.post(
+            "/api/v1/auth/mfa/disable/",
+            {
+                "current_password": "Owner-password-123",
+                "code": new_codes[0],
+            },
+            format="json",
+        )
+        self.assertEqual(disabled.status_code, 200, disabled.content)
+        self.assertFalse(MultiFactorCredential.objects.filter(user=self.user).exists())
+        self.assertTrue(disabled.json()["mfa"]["enrollmentRequired"])
+        self.assertEqual(self.client.get("/api/v1/organizations/").status_code, 403)
+        self.assertTrue(
+            AuditEvent.objects.filter(
+                action="auth.mfa_disabled", actor=self.user
+            ).exists()
+        )
+
+    def test_password_or_security_change_invalidates_a_pending_challenge(self):
+        self.enroll()
+        self.client.post("/api/v1/auth/logout/", {}, format="json")
+        challenge = self.password_login().json()["challenge"]
+        self.user.refresh_from_db()
+        self.user.set_password("Changed-password-456")
+        self.user.security_version += 1
+        self.user.save(update_fields=["password", "security_version"])
+        response = self.client.post(
+            "/api/v1/auth/mfa/challenge/",
+            {"challenge": challenge, "code": "000000"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("invalid or has expired", response.json()["detail"])
+
+    def test_operator_reset_requires_exact_confirmation_and_sends_notice(self):
+        self.enroll()
+        Token.objects.create(user=self.user)
+        with self.assertRaises(CommandError):
+            management.call_command(
+                "reset_user_mfa",
+                email=self.user.email,
+                confirm_email="different@example.org",
+                reason="Support case PH-12",
+            )
+        output = StringIO()
+        management.call_command(
+            "reset_user_mfa",
+            email=self.user.email,
+            confirm_email=self.user.email,
+            reason="Support case PH-12",
+            stdout=output,
+        )
+        self.assertFalse(MultiFactorCredential.objects.filter(user=self.user).exists())
+        self.assertFalse(Token.objects.filter(user=self.user).exists())
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("two-step verification was reset", mail.outbox[0].subject.lower())
+        self.assertNotIn(self.user.email, output.getvalue())
+        self.assertTrue(
+            AuditEvent.objects.filter(action="auth.mfa_reset_by_operator").exists()
+        )
+
+    def test_operator_reset_stays_committed_when_notification_fails(self):
+        self.enroll()
+        with patch(
+            "identity.management.commands.reset_user_mfa.EmailMessage.send",
+            side_effect=RuntimeError("mail unavailable"),
+        ):
+            with self.assertRaisesMessage(
+                CommandError, "was reset, but the security notification failed"
+            ):
+                management.call_command(
+                    "reset_user_mfa",
+                    email=self.user.email,
+                    confirm_email=self.user.email,
+                    reason="Approved recovery case PH-13",
+                )
+        self.assertFalse(MultiFactorCredential.objects.filter(user=self.user).exists())
+        self.assertTrue(
+            AuditEvent.objects.filter(action="auth.mfa_reset_by_operator").exists()
+        )
+
+    def test_encryption_key_rotation_preserves_totp_and_recovery_codes(self):
+        from .mfa import consume_mfa_code, decrypt_secret
+
+        old_key = Fernet.generate_key().decode()
+        new_key = Fernet.generate_key().decode()
+        with self.settings(PROJECT_HOPE_MFA_ENCRYPTION_KEYS=(old_key,)):
+            secret, recovery_codes = self.enroll()
+        credential = MultiFactorCredential.objects.get(user=self.user)
+        with self.settings(PROJECT_HOPE_MFA_ENCRYPTION_KEYS=(new_key, old_key)):
+            self.assertEqual(decrypt_secret(credential.encrypted_secret), secret)
+            output = StringIO()
+            management.call_command("rotate_mfa_encryption", stdout=output)
+            self.assertIn("1 recovery-code set", output.getvalue())
+            management.call_command(
+                "rotate_mfa_encryption", execute=True, stdout=StringIO()
+            )
+            verified = consume_mfa_code(self.user, recovery_codes[0])
+        credential.refresh_from_db()
+        with self.settings(PROJECT_HOPE_MFA_ENCRYPTION_KEYS=(new_key,)):
+            self.assertEqual(decrypt_secret(credential.encrypted_secret), secret)
+        self.assertEqual(verified.method, "recovery_code")
 
 
 @override_settings(

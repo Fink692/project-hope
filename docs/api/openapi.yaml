@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Project Hope API
-  version: 1.6.0
+  version: 1.7.0
   description: Tenant-bound API for self-hosted charity operations.
 servers:
   - url: /api/v1
@@ -17,7 +17,8 @@ paths:
         '200': { description: Healthy }
   /me/:
     get:
-      summary: Current user and active organizations
+      summary: Current user, MFA policy, and active organizations
+      description: Required but incomplete MFA enrollment returns an empty organizations list and workspaceAccessGranted false.
       responses:
         '200': { description: Identity and memberships }
   /auth/csrf/:
@@ -30,8 +31,14 @@ paths:
     post:
       security: []
       summary: Create a CSRF-protected browser session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
       responses:
         '200': { description: Authenticated browser user }
+        '202': { description: Password accepted; a short-lived MFA challenge is required }
         '400': { description: Invalid credentials }
         '403': { description: CSRF check failed }
         '429': { description: Per-account or IP login limit reached }
@@ -39,10 +46,99 @@ paths:
     post:
       security: []
       summary: Exchange credentials for a native-client API token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
       responses:
         '200': { description: Authenticated user and token }
+        '202': { description: Password accepted; a short-lived MFA challenge is required }
         '400': { description: Invalid credentials }
         '429': { description: Per-account or IP login limit reached }
+  /auth/mfa/challenge/:
+    post:
+      security: []
+      summary: Complete a browser or native sign-in with TOTP or a one-time recovery code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [challenge, code]
+              properties:
+                challenge: { type: string, maxLength: 2048 }
+                code: { type: string, maxLength: 32 }
+      responses:
+        '200': { description: Session created or native token issued }
+        '400': { description: Challenge invalid, expired, replayed, or code rejected }
+        '403': { description: Browser CSRF check failed }
+        '429': { description: Challenge or IP attempt limit reached }
+  /auth/mfa/:
+    get:
+      summary: Read two-step verification and recovery-code status
+      responses:
+        '200': { description: MFA status, policy, enrollment requirement, and remaining code count }
+  /auth/mfa/enrollment/:
+    post:
+      summary: Begin a password-confirmed TOTP enrollment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [current_password]
+              properties:
+                current_password: { type: string, maxLength: 256, format: password }
+      responses:
+        '200': { description: Private expiring setup payload, manual secret, and locally generated QR data URL }
+        '400': { description: Current password rejected }
+        '409': { description: MFA is already enabled }
+        '429': { description: Enrollment attempt limit reached }
+  /auth/mfa/enrollment/confirm/:
+    post:
+      summary: Confirm TOTP enrollment and return recovery codes once
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [enrollment_token, code]
+              properties:
+                enrollment_token: { type: string, maxLength: 4096 }
+                code: { type: string, pattern: '^[0-9]{6}$' }
+      responses:
+        '201': { description: MFA enabled; old sessions and native tokens superseded }
+        '400': { description: Setup invalid, expired, or code rejected }
+        '409': { description: MFA is already enabled }
+  /auth/mfa/recovery-codes/:
+    post:
+      summary: Replace every recovery code after password and MFA verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MfaStepUpRequest' }
+      responses:
+        '200': { description: New one-time recovery codes returned once; earlier codes invalidated }
+        '400': { description: Password or verification code rejected }
+  /auth/mfa/disable/:
+    post:
+      summary: Disable MFA after password and MFA verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MfaStepUpRequest' }
+      responses:
+        '200': { description: MFA disabled and old sessions/native tokens superseded }
+        '400': { description: Password or verification code rejected }
   /auth/password-reset/:
     post:
       security: []
@@ -160,6 +256,20 @@ components:
     MembershipId: { name: membershipId, in: path, required: true, schema: { type: string, format: uuid } }
     InvitationId: { name: invitationId, in: path, required: true, schema: { type: string, format: uuid } }
   schemas:
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email: { type: string, format: email, maxLength: 254 }
+        password: { type: string, format: password, maxLength: 256 }
+    MfaStepUpRequest:
+      type: object
+      additionalProperties: false
+      required: [current_password, code]
+      properties:
+        current_password: { type: string, format: password, maxLength: 256 }
+        code: { type: string, maxLength: 32, description: Current TOTP or unused recovery code. }
     PilotApplicationRequest:
       type: object
       additionalProperties: false

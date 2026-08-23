@@ -221,10 +221,38 @@ h1 { margin-bottom: 0; font-size: 1rem; letter-spacing: -.02em; }
 .invitation-lede { max-width: 580px; color: var(--muted); line-height: 1.65; }
 .invitation-form { margin-top: 2rem; }
 .standalone-field { display: grid; gap: .4rem; color: var(--muted); font-size: .8rem; font-weight: 750; }
-.invitation-form input, .team-invite-form input, .team-invite-form select, .role-control select { width: 100%; min-height: 2.8rem; border: 1px solid var(--line); border-radius: .55rem; padding: .65rem .75rem; background: white; color: var(--ink); font: inherit; }
-.invitation-form input:focus, .team-invite-form input:focus, .team-invite-form select:focus, .role-control select:focus { outline: 3px solid rgba(223, 118, 91, .35); outline-offset: 1px; border-color: var(--coral); }
+.invitation-form input, .team-invite-form input, .team-invite-form select, .role-control select, .security-form input { width: 100%; min-height: 2.8rem; border: 1px solid var(--line); border-radius: .55rem; padding: .65rem .75rem; background: white; color: var(--ink); font: inherit; }
+.invitation-form input:focus, .team-invite-form input:focus, .team-invite-form select:focus, .role-control select:focus, .security-form input:focus { outline: 3px solid rgba(223, 118, 91, .35); outline-offset: 1px; border-color: var(--coral); }
 .invitation-existing { padding: 1.1rem; border-left: 4px solid #6e9a88; border-radius: .2rem .75rem .75rem .2rem; background: #edf4ef; }
 .invitation-existing p { margin: .4rem 0 0; color: var(--muted); line-height: 1.5; }
+.security-panel { display: grid; gap: 1.4rem; }
+.security-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+.security-status { flex: 0 0 auto; padding: .45rem .75rem; border-radius: 99px; font-size: .78rem; font-weight: 850; }
+.security-status.enabled { background: #dcecdf; color: #245d3b; }
+.security-status.attention { background: #f8dfd6; color: #893927; }
+.security-required { padding: 1rem 1.1rem; border: 1px solid #df765b; border-left-width: 5px; border-radius: .8rem; background: #fff5f0; color: #6f2d21; }
+.security-required p { margin: .35rem 0 0; line-height: 1.5; }
+.security-form { display: grid; gap: 1rem; padding: 1.3rem; border: 1px solid var(--line); border-radius: 1rem; background: #f8f6f0; }
+.security-form h4, .recovery-code-card h4 { margin: 0; font-size: 1.25rem; }
+.security-form p, .recovery-code-card p { margin: .35rem 0 0; color: var(--muted); line-height: 1.55; }
+.security-form label { display: grid; gap: .4rem; max-width: 520px; color: var(--muted); font-size: .82rem; font-weight: 800; }
+.mfa-enrollment { display: grid; grid-template-columns: minmax(210px, .55fr) minmax(300px, 1.45fr); gap: 1.2rem; align-items: stretch; }
+.mfa-qr { display: grid; align-content: center; justify-items: center; gap: .75rem; padding: 1rem; border: 1px solid var(--line); border-radius: 1rem; background: white; text-align: center; }
+.mfa-qr img { width: min(100%, 260px); height: auto; }
+.mfa-qr small { max-width: 240px; color: var(--muted); line-height: 1.45; }
+.manual-secret { display: block; width: fit-content; max-width: 100%; margin-top: .75rem; padding: .65rem .8rem; overflow-wrap: anywhere; border-radius: .5rem; background: #e7efe9; color: var(--forest); font-size: .95rem; letter-spacing: .08em; }
+.recovery-code-card { padding: 1.4rem; border: 2px solid #6e9a88; border-radius: 1rem; background: #f2f8f3; }
+.recovery-code-card ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .55rem; margin: 1rem 0; padding: 0; list-style: none; }
+.recovery-code-card li { padding: .6rem .75rem; border: 1px solid #bfd2c4; border-radius: .55rem; background: white; text-align: center; }
+.recovery-code-card code { color: var(--forest); font-size: .95rem; font-weight: 800; letter-spacing: .06em; }
+.security-management { display: grid; gap: 1.2rem; }
+.security-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .8rem; }
+.security-facts article { padding: 1rem; border: 1px solid var(--line); border-radius: .8rem; background: white; }
+.security-facts span, .security-facts strong, .security-facts small { display: block; }
+.security-facts span { color: var(--muted); font-size: .75rem; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+.security-facts strong { margin: .35rem 0; font-size: 1.35rem; }
+.security-facts small { color: var(--muted); line-height: 1.4; }
+.danger-outline { border-color: #b84f3b !important; color: #983727 !important; }
 .team-invite-form { display: grid; grid-template-columns: 1.1fr 1fr .7fr auto; gap: .8rem; align-items: end; margin: 1.5rem 0; padding: 1.2rem; border-radius: 1rem; background: #e7efe9; }
 .team-invite-form h4 { margin: .15rem 0 0; font-size: 1rem; }
 .team-invite-form label { display: grid; gap: .35rem; color: var(--muted); font-size: .8rem; font-weight: 750; }
@@ -248,5 +276,5 @@ h1 { margin-bottom: 0; font-size: 1rem; letter-spacing: -.02em; }
 .inline-actions { display: flex; gap: .8rem; }
 @media (max-width: 850px) { .workspace-header { align-items: flex-start; flex-direction: column; }.workspace-controls { align-items: center; width: 100%; justify-content: space-between; }.workspace-layout { grid-template-columns: 1fr; }.module-nav { display: flex; gap: .25rem; overflow-x: auto; padding-bottom: .5rem; }.module-nav button { white-space: nowrap; border-left: 0; border-bottom: 2px solid transparent; }.module-nav button:hover, .module-nav button.selected { border-bottom-color: var(--coral); border-left-color: transparent; }.module-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }.sign-in-form { grid-template-columns: 1fr 1fr; }.sign-in-form button { grid-column: 1 / -1; justify-self: start; }.onboarding-card { grid-template-columns: 1fr; }.onboarding-steps { grid-template-columns: repeat(3, 1fr); }.download-grid { grid-template-columns: 1fr; }.download-card { min-height: auto; } }
 @media (max-width: 520px) { .workspace { padding: 1.2rem; }.workspace-controls, .sign-in-form { display: grid; grid-template-columns: 1fr; }.workspace-controls .text-button { justify-self: start; }.module-grid { grid-template-columns: 1fr; }.sign-in-form button { grid-column: auto; }.form-grid { grid-template-columns: 1fr; }.form-grid label:has(textarea) { grid-column: auto; }.module-toolbar > .button { flex: 1 1 auto; }.onboarding-steps { grid-template-columns: 1fr; } }
-@media (max-width: 900px) { .invitation-acceptance { grid-template-columns: 1fr; }.invitation-visual { min-height: 230px; }.invitation-visual p { max-width: 520px; }.team-invite-form { grid-template-columns: 1fr 1fr; }.team-invite-form > div { grid-column: 1 / -1; }.team-invite-form button { justify-self: start; }.team-list article { grid-template-columns: auto 1fr auto; }.team-list .role-control { grid-column: 2; }.team-list .danger { grid-column: 3; grid-row: 1 / span 2; } }
-@media (max-width: 560px) { .invitation-acceptance { margin-top: 1rem; border-radius: 1rem; }.invitation-visual { min-height: 180px; padding: 1.5rem; }.invitation-visual p { font-size: 1.5rem; }.invitation-card { padding: 1.5rem; }.team-invite-form { grid-template-columns: 1fr; }.team-invite-form > div { grid-column: auto; }.team-list article { grid-template-columns: auto 1fr; padding: .8rem 0; }.team-list .role-control, .team-list .danger { grid-column: 2; grid-row: auto; justify-self: start; }.invitation-list article { align-items: flex-start; flex-direction: column; padding: .8rem 0; } }
+@media (max-width: 900px) { .invitation-acceptance { grid-template-columns: 1fr; }.invitation-visual { min-height: 230px; }.invitation-visual p { max-width: 520px; }.team-invite-form { grid-template-columns: 1fr 1fr; }.team-invite-form > div { grid-column: 1 / -1; }.team-invite-form button { justify-self: start; }.team-list article { grid-template-columns: auto 1fr auto; }.team-list .role-control { grid-column: 2; }.team-list .danger { grid-column: 3; grid-row: 1 / span 2; }.mfa-enrollment { grid-template-columns: 1fr; }.security-facts { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 560px) { .invitation-acceptance { margin-top: 1rem; border-radius: 1rem; }.invitation-visual { min-height: 180px; padding: 1.5rem; }.invitation-visual p { font-size: 1.5rem; }.invitation-card { padding: 1.5rem; }.team-invite-form { grid-template-columns: 1fr; }.team-invite-form > div { grid-column: auto; }.team-list article { grid-template-columns: auto 1fr; padding: .8rem 0; }.team-list .role-control, .team-list .danger { grid-column: 2; grid-row: auto; justify-self: start; }.invitation-list article { align-items: flex-start; flex-direction: column; padding: .8rem 0; }.security-heading { display: grid; }.security-status { justify-self: start; }.security-facts, .recovery-code-card ul { grid-template-columns: 1fr; } }

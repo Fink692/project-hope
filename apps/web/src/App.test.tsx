@@ -355,4 +355,92 @@ describe("Project Hope web shell", () => {
     expect(screen.getByLabelText("Email")).toHaveValue("amina@example.org");
     expect(confirmPayload).toMatchObject({ uid: "private-uid", token: "private-reset-token" });
   });
+
+  it("completes a two-step sign-in without putting the challenge in the URL", async () => {
+    const organization = { id: "org-1", name: "Hope Demo", slug: "hope-demo", status: "active" };
+    const session = {
+      user: { email: "owner@example.org", display_name: "Demo Owner" },
+      organizations: [{ organization, role: "owner" }],
+      mfa: { enabled: true, required: true, enrollmentRequired: false, enabledAt: "2026-08-23T12:00:00Z", recoveryCodesRemaining: 9 },
+    };
+    let signedIn = false;
+    let challengePayload: Record<string, unknown> | undefined;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path.endsWith("/healthz/")) return Promise.resolve(new Response(JSON.stringify({ status: "ok", database: "ok" }), { status: 200 }));
+      if (path.endsWith("/auth/csrf/")) return Promise.resolve(new Response(JSON.stringify({ csrfTokenAvailable: true }), { status: 200 }));
+      if (path.endsWith("/auth/login/") && init?.method === "POST") return Promise.resolve(new Response(JSON.stringify({ mfaRequired: true, challenge: "private-signed-challenge", expiresInSeconds: 300, methods: ["totp", "recovery_code"] }), { status: 202 }));
+      if (path.endsWith("/auth/mfa/challenge/") && init?.method === "POST") {
+        challengePayload = JSON.parse(String(init.body));
+        signedIn = true;
+        return Promise.resolve(new Response(JSON.stringify({ user: session.user, mfa: session.mfa, recoveryCodeUsed: false }), { status: 200 }));
+      }
+      if (path.endsWith("/me/")) return Promise.resolve(signedIn ? new Response(JSON.stringify(session), { status: 200 }) : new Response("{}", { status: 401 }));
+      return Promise.resolve(new Response("{}", { status: 200 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    fireEvent.change(await screen.findByLabelText("Email"), { target: { value: "owner@example.org" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "correct-password" } });
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+
+    expect(await screen.findByRole("heading", { name: "Confirm it’s you." })).toBeInTheDocument();
+    expect(window.location.href).not.toContain("private-signed-challenge");
+    const challengeAccessibility = await axe.run(document.body, {
+      runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"] },
+      rules: { "color-contrast": { enabled: false } },
+    });
+    expect(challengeAccessibility.violations.map(({ id }) => id)).toEqual([]);
+    fireEvent.change(screen.getByLabelText("Authenticator code"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Verify and sign in" }));
+
+    expect(await screen.findByRole("heading", { name: "Hope Demo" })).toBeInTheDocument();
+    expect(challengePayload).toEqual({ challenge: "private-signed-challenge", code: "123456" });
+  });
+
+  it("blocks workspace data until guided two-step setup and shows recovery codes once", async () => {
+    const organization = { id: "org-1", name: "Hope Demo", slug: "hope-demo", status: "active" };
+    const pendingMfa = { enabled: false, required: true, enrollmentRequired: true, enabledAt: null as string | null, recoveryCodesRemaining: 0 };
+    const enabledMfa = { enabled: true, required: true, enrollmentRequired: false, enabledAt: "2026-08-23T12:00:00Z", recoveryCodesRemaining: 10 };
+    let session = { user: { email: "owner@example.org", display_name: "Demo Owner" }, organizations: [] as Array<{ organization: typeof organization; role: string }>, mfa: pendingMfa, workspaceAccessGranted: false };
+    let beginPayload: Record<string, unknown> | undefined;
+    let confirmationPayload: Record<string, unknown> | undefined;
+    const recoveryCodes = ["ABCDE-23456", "FGHJK-34567", "LMNPQ-45678", "RSTUV-56789", "WXYZA-67892", "BCDEF-78923", "GHJKL-89234", "MNPQR-92345", "STUVW-23457", "XYZAB-34568"];
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path.endsWith("/healthz/")) return Promise.resolve(new Response(JSON.stringify({ status: "ok", database: "ok" }), { status: 200 }));
+      if (path.endsWith("/me/")) return Promise.resolve(new Response(JSON.stringify(session), { status: 200 }));
+      if (path.endsWith("/auth/mfa/enrollment/") && init?.method === "POST") {
+        beginPayload = JSON.parse(String(init.body));
+        return Promise.resolve(new Response(JSON.stringify({ enrollmentToken: "private-enrollment", secret: "ABCDEFGHIJKLMNOP234567ABCDEFGHIJKLMNOP", formattedSecret: "ABCD EFGH IJKL MNOP 2345 67AB CDEF GHIJ", otpauthUri: "otpauth://totp/Project%20Hope:owner", qrCodeDataUrl: "data:image/svg+xml;base64,PHN2Zy8+", expiresInSeconds: 600 }), { status: 200 }));
+      }
+      if (path.endsWith("/auth/mfa/enrollment/confirm/") && init?.method === "POST") {
+        confirmationPayload = JSON.parse(String(init.body));
+        session = { user: session.user, organizations: [{ organization, role: "owner" }], mfa: enabledMfa, workspaceAccessGranted: true };
+        return Promise.resolve(new Response(JSON.stringify({ detail: "Two-step verification is enabled.", recoveryCodes, mfa: enabledMfa, reauthenticationRequired: false }), { status: 201 }));
+      }
+      return Promise.resolve(new Response("{}", { status: 200 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    expect(await screen.findByText("Protect this account before continuing.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "CRM" })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Current password"), { target: { value: "correct-password" } });
+    fireEvent.click(screen.getByRole("button", { name: "Set up two-step verification" }));
+    expect(await screen.findByAltText(/Authenticator setup QR code/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Six-digit authenticator code"), { target: { value: "654321" } });
+    fireEvent.click(screen.getByRole("button", { name: "Verify and turn on" }));
+
+    expect(await screen.findByRole("heading", { name: "Save your recovery codes." })).toBeInTheDocument();
+    expect(screen.getByText("ABCDE-23456")).toBeInTheDocument();
+    expect(beginPayload).toEqual({ current_password: "correct-password" });
+    expect(confirmationPayload).toEqual({ enrollment_token: "private-enrollment", code: "654321" });
+    const setupAccessibility = await axe.run(document.body, {
+      runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"] },
+      rules: { "color-contrast": { enabled: false } },
+    });
+    expect(setupAccessibility.violations.map(({ id }) => id)).toEqual([]);
+  });
 });

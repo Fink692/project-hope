@@ -3,6 +3,7 @@ from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 
 from .models import (
     Membership,
+    MultiFactorCredential,
     Organization,
     OrganizationInvitation,
     PasswordResetDelivery,
@@ -31,8 +32,12 @@ class UserAdmin(BaseUserAdmin):
                 )
             },
         ),
-        ("Important dates", {"fields": ("last_login", "date_joined")}),
+        (
+            "Security and dates",
+            {"fields": ("security_version", "last_login", "date_joined")},
+        ),
     )
+    readonly_fields = ("security_version", "last_login", "date_joined")
     add_fieldsets = (
         (
             None,
@@ -49,6 +54,27 @@ class OrganizationAdmin(admin.ModelAdmin):
     list_display = ("name", "slug", "status", "created_at")
     search_fields = ("name", "slug")
     list_filter = ("status",)
+
+
+@admin.register(MultiFactorCredential)
+class MultiFactorCredentialAdmin(admin.ModelAdmin):
+    list_display = ("user", "enabled_at", "recovery_codes_remaining", "updated_at")
+    search_fields = ("user__email",)
+    exclude = ("encrypted_secret", "recovery_code_hashes", "last_used_counter")
+    readonly_fields = ("id", "user", "enabled_at", "updated_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    @admin.display(description="Recovery codes")
+    def recovery_codes_remaining(self, credential):
+        return len(credential.recovery_code_hashes)
 
 
 @admin.register(Membership)

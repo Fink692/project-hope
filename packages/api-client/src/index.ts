@@ -1,8 +1,12 @@
 export type Organization = { id: string; name: string; slug: string; status: string };
-export type LoginResponse = { user: { email: string; display_name: string }; token: string };
+export type MfaStatus = { enabled: boolean; required: boolean; enrollmentRequired: boolean; enabledAt: string | null; recoveryCodesRemaining: number };
+export type MfaChallengeResponse = { mfaRequired: true; challenge: string; expiresInSeconds: number; methods: Array<"totp" | "recovery_code"> };
+export type LoginResponse = { user: { email: string; display_name: string }; token: string; mfa: MfaStatus } | MfaChallengeResponse;
 export type SessionResponse = {
   user: { email: string; display_name: string };
   organizations: Array<{ organization: Organization; role: string; membershipId: string }>;
+  mfa: MfaStatus;
+  workspaceAccessGranted: boolean;
 };
 export type WorkflowState =
   | "created" | "classified" | "awaiting_context" | "retrieving" | "generating"

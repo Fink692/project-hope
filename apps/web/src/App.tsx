@@ -16,6 +16,31 @@ type Organization = {
 type Session = {
   user: { email: string; display_name: string };
   organizations: Array<{ organization: Organization; role: string }>;
+  mfa?: MfaStatus;
+  workspaceAccessGranted?: boolean;
+};
+
+type MfaStatus = {
+  enabled: boolean;
+  required: boolean;
+  enrollmentRequired: boolean;
+  enabledAt: string | null;
+  recoveryCodesRemaining: number;
+};
+
+type MfaChallenge = {
+  challenge: string;
+  expiresInSeconds: number;
+  methods: string[];
+};
+
+type MfaEnrollment = {
+  enrollmentToken: string;
+  secret: string;
+  formattedSecret: string;
+  otpauthUri: string;
+  qrCodeDataUrl: string;
+  expiresInSeconds: number;
 };
 
 type TeamMember = {
@@ -87,6 +112,7 @@ type PilotFormValues = {
 };
 
 const modules: ModuleDefinition[] = [
+  { id: "security", label: "Account security", description: "Two-step verification and recovery codes", endpoint: "mfa", color: "coral" },
   { id: "team", label: "Team & access", description: "Invite staff, assign roles, and review access", endpoint: "members", color: "blue" },
   { id: "crm", label: "CRM", description: "People, households, consent, and relationships", endpoint: "contacts", color: "sage" },
   { id: "volunteers", label: "Volunteers", description: "Applications, skills, availability, and onboarding", endpoint: "volunteer-applications", color: "blue" },
@@ -186,6 +212,7 @@ function App() {
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [loginBusy, setLoginBusy] = useState(false);
+  const [mfaChallenge, setMfaChallenge] = useState<MfaChallenge | null>(null);
   const [invitationToken, setInvitationToken] = useState("");
   const [passwordReset, setPasswordReset] = useState<PasswordResetCredential | null>(null);
   const [requestPasswordReset, setRequestPasswordReset] = useState(false);
@@ -284,6 +311,7 @@ function App() {
 
   useEffect(() => {
     if (session && !selectedOrganization) setSelectedOrganization(session.organizations[0]?.organization.slug ?? "");
+    if (session?.mfa?.enrollmentRequired || (session && session.organizations.length === 0)) setActiveModule("security");
   }, [selectedOrganization, session]);
 
   async function login(event: FormEvent) {
@@ -292,7 +320,16 @@ function App() {
     setLoginBusy(true);
     try {
       await request("/api/v1/auth/csrf/");
-      await request("/api/v1/auth/login/", { method: "POST", body: JSON.stringify({ email: loginEmail, password: loginPassword }) });
+      const result = await request("/api/v1/auth/login/", { method: "POST", body: JSON.stringify({ email: loginEmail, password: loginPassword }) });
+      if (result?.mfaRequired && typeof result.challenge === "string") {
+        setMfaChallenge({
+          challenge: result.challenge,
+          expiresInSeconds: Number(result.expiresInSeconds) || 300,
+          methods: Array.isArray(result.methods) ? result.methods : ["totp", "recovery_code"],
+        });
+        setLoginPassword("");
+        return;
+      }
       setSession(await request("/api/v1/me/"));
       setLoginPassword("");
     } catch (error) {
@@ -303,7 +340,30 @@ function App() {
   }
 
   async function logout() {
-    try { await request("/api/v1/auth/logout/", { method: "POST", body: "{}" }); } finally { setSession(null); }
+    try { await request("/api/v1/auth/logout/", { method: "POST", body: "{}" }); } finally { setSession(null); setMfaChallenge(null); }
+  }
+
+  async function mfaAuthenticated(recoveryCodeUsed: boolean) {
+    const nextSession = await request("/api/v1/me/") as Session;
+    setSession(nextSession);
+    setMfaChallenge(null);
+    setActiveModule(nextSession.mfa?.enrollmentRequired ? "security" : "overview");
+    if (recoveryCodeUsed) setWorkspaceNotice("Signed in with a recovery code. Create a replacement code from Account security.");
+  }
+
+  async function securityChanged(fallbackMfa: MfaStatus) {
+    try {
+      const nextSession = await request("/api/v1/me/") as Session;
+      setSession(nextSession);
+      setSelectedOrganization(nextSession.organizations[0]?.organization.slug ?? "");
+    } catch {
+      setSession((current) => current ? {
+        ...current,
+        mfa: fallbackMfa,
+        organizations: fallbackMfa.enrollmentRequired ? [] : current.organizations,
+      } : current);
+    }
+    setActiveModule("security");
   }
 
   async function invitationAccepted(result: {
@@ -367,7 +427,8 @@ function App() {
       <main id="main-content">
         {invitationToken && <InvitationAcceptance token={invitationToken} onAccepted={(result) => void invitationAccepted(result)} onCancel={() => setInvitationToken("")} />}
         {!invitationToken && (requestPasswordReset || passwordReset) && <PasswordResetPanel credentials={passwordReset} initialEmail={loginEmail} onCancel={() => { setPasswordReset(null); setRequestPasswordReset(false); }} onCompleted={passwordResetCompleted} />}
-        {!invitationToken && !requestPasswordReset && !passwordReset && <>
+        {!invitationToken && !requestPasswordReset && !passwordReset && mfaChallenge && <MfaChallengePanel challenge={mfaChallenge} onAuthenticated={(usedRecoveryCode) => void mfaAuthenticated(usedRecoveryCode)} onCancel={() => setMfaChallenge(null)} />}
+        {!invitationToken && !requestPasswordReset && !passwordReset && !mfaChallenge && <>
         {workspaceNotice && <div className="verification-banner" role="status" aria-live="polite"><strong>Access updated</strong><span>{workspaceNotice}</span><button className="text-button" type="button" onClick={() => setWorkspaceNotice("")}>Dismiss</button></div>}
         {pilotVerification !== "idle" && <div className={`verification-banner ${pilotVerification === "error" ? "error" : ""}`} role={pilotVerification === "error" ? "alert" : "status"} aria-live="polite"><strong>{pilotVerification === "checking" ? "Confirming your email…" : pilotVerification === "confirmed" ? "Email confirmed" : "Confirmation problem"}</strong>{pilotVerificationMessage && <span>{pilotVerificationMessage}</span>}</div>}
         <section className="hero" id="overview" aria-labelledby="hero-title">
@@ -393,7 +454,7 @@ function App() {
 
         {!session && (
           <section className="section sign-in-section" id="sign-in" aria-labelledby="sign-in-title">
-            <div className="section-heading"><div><p className="eyebrow">Organization access</p><h2 id="sign-in-title">Sign in when you’re ready.</h2></div><p>The demo account is for local development only. Production identity belongs behind Keycloak and MFA.</p></div>
+            <div className="section-heading"><div><p className="eyebrow">Organization access</p><h2 id="sign-in-title">Sign in when you’re ready.</h2></div><p>The demo account is for local development only. Production accounts use password throttling and built-in two-step verification.</p></div>
             <form className="sign-in-form" onSubmit={login}>
               <label>Email<input type="email" value={loginEmail} onChange={(event) => setLoginEmail(event.target.value)} autoComplete="username" required /></label>
               <label>Password<input type="password" value={loginPassword} onChange={(event) => setLoginPassword(event.target.value)} autoComplete="current-password" required /></label>
@@ -411,18 +472,18 @@ function App() {
 
         {!session && <section className="section download-section" id="download" aria-labelledby="download-title"><div className="section-heading"><div><p className="eyebrow">One workspace, every device</p><h2 id="download-title">Install Project Hope like an app.</h2></div><p>Your charity gets one hosted workspace. Staff can install it on desktop, use the mobile app, and see the same organization data everywhere.</p></div><div className="download-grid"><article className="download-card featured"><span className="card-number" aria-hidden="true">01</span><h3>Desktop installer</h3><p>Download the Windows, macOS, or Linux installer prepared for your workspace. It opens like a normal app and updates with releases.</p><div className="card-actions"><a className="button primary compact" href="https://github.com/Fink692/project-hope/releases/latest" target="_blank" rel="noreferrer">Download installer</a>{installPrompt ? <button className="button secondary compact" type="button" onClick={() => void installApp()}>Install from browser</button> : <small>ChromeOS and browser users can choose “Install Project Hope” from the browser menu.</small>}</div></article><article className="download-card"><span className="card-number" aria-hidden="true">02</span><h3>iPhone and Android</h3><p>The Expo mobile client uses the same secure sign-in and hosted workspace for field work, schedules, volunteers, and tasks.</p><small>App Store builds are prepared by the organization’s setup partner with its own signing accounts.</small></article><article className="download-card"><span className="card-number" aria-hidden="true">03</span><h3>Everything connected</h3><p>No duplicate databases, file transfers, or per-device setup. One organization boundary, one login, one source of truth.</p><a className="button secondary compact" href="https://github.com/Fink692/project-hope/blob/main/docs/DISTRIBUTION_FOR_CHARITIES.md" target="_blank" rel="noreferrer">See how it works</a></article></div></section>}
 
-        {session && currentOrganization && (
+        {session && (
           <section className="section workspace" id="workspace" aria-labelledby="workspace-title">
             <div className="workspace-header">
-              <div><p className="eyebrow">{session.user.display_name}</p><h2 id="workspace-title">{currentOrganization.name}</h2><p className="workspace-role">Signed in as {session.organizations.find(({ organization }) => organization.slug === currentOrganization.slug)?.role}</p></div>
-              <div className="workspace-controls"><label className="organization-select">Organization<select value={currentOrganization.slug} onChange={(event) => setSelectedOrganization(event.target.value)}>{session.organizations.map(({ organization }) => <option key={organization.slug} value={organization.slug}>{organization.name}</option>)}</select></label><button className="text-button" type="button" onClick={logout}>Sign out</button></div>
+              {currentOrganization ? <div><p className="eyebrow">{session.user.display_name}</p><h2 id="workspace-title">{currentOrganization.name}</h2><p className="workspace-role">Signed in as {session.organizations.find(({ organization }) => organization.slug === currentOrganization.slug)?.role}</p></div> : <div><p className="eyebrow">{session.user.display_name}</p><h2 id="workspace-title">Account security</h2><p className="workspace-role">Complete account protection before organization data can open.</p></div>}
+              <div className="workspace-controls">{currentOrganization && <label className="organization-select">Organization<select value={currentOrganization.slug} onChange={(event) => setSelectedOrganization(event.target.value)}>{session.organizations.map(({ organization }) => <option key={organization.slug} value={organization.slug}>{organization.name}</option>)}</select></label>}<button className="text-button" type="button" onClick={logout}>Sign out</button></div>
             </div>
             <div className="workspace-layout">
               <nav className="module-nav" aria-label="Workspace modules">
-                <button aria-current={activeModule === "overview" ? "page" : undefined} className={activeModule === "overview" ? "selected" : ""} type="button" onClick={() => setActiveModule("overview")}>Workspace overview</button>
-                {modules.map((module) => <button aria-current={activeModule === module.id ? "page" : undefined} className={activeModule === module.id ? "selected" : ""} type="button" key={module.id} onClick={() => setActiveModule(module.id)}>{module.label}</button>)}
+                {currentOrganization && !session.mfa?.enrollmentRequired && <button aria-current={activeModule === "overview" ? "page" : undefined} className={activeModule === "overview" ? "selected" : ""} type="button" onClick={() => setActiveModule("overview")}>Workspace overview</button>}
+                {modules.filter((module) => currentOrganization ? !session.mfa?.enrollmentRequired || module.id === "security" : module.id === "security").map((module) => <button aria-current={activeModule === module.id ? "page" : undefined} className={activeModule === module.id ? "selected" : ""} type="button" key={module.id} onClick={() => setActiveModule(module.id)}>{module.label}</button>)}
               </nav>
-              <div className="module-content">{activeModule === "overview" ? <WorkspaceOverview onOpen={(id) => setActiveModule(id)} /> : activeModule === "team" ? <TeamPanel organization={currentOrganization} role={currentRole} /> : selectedModule ? <ModulePanel module={selectedModule} organization={currentOrganization} /> : null}</div>
+              <div className="module-content">{activeModule === "security" || session.mfa?.enrollmentRequired || !currentOrganization ? <SecurityPanel mfa={session.mfa} onChanged={securityChanged} /> : activeModule === "overview" ? <WorkspaceOverview onOpen={(id) => setActiveModule(id)} /> : activeModule === "team" ? <TeamPanel organization={currentOrganization} role={currentRole} /> : selectedModule ? <ModulePanel module={selectedModule} organization={currentOrganization} /> : null}</div>
             </div>
           </section>
         )}
@@ -432,7 +493,227 @@ function App() {
         <section className="section roadmap-section" id="roadmap" aria-labelledby="roadmap-title"><div className="section-heading"><div><p className="eyebrow">Guardrails across the product</p><h2 id="roadmap-title">Small steps, clear proof.</h2></div><p>Every module earns its place by passing safety, accessibility, and operational checks.</p></div><ol className="roadmap-list"><li className="complete"><span>01</span><div><strong>Foundation</strong><p>Identity, tenancy, authorization, audit, and health.</p></div><b>Complete</b></li><li><span>02</span><div><strong>Core operations</strong><p>CRM, volunteers, scheduling, documents, and reporting.</p></div><b>Ready</b></li><li><span>03</span><div><strong>Bounded assistance</strong><p>Email, grants, translation, resources, and reviewable AI.</p></div><b>Human review</b></li><li><span>04</span><div><strong>Expansion</strong><p>PWA, voice, donor cohorts, plugins, and native clients.</p></div><b>Controlled</b></li></ol></section>
         </>}
       </main>
-      <footer className="site-footer"><p>Project Hope · free self-hosted core · managed support available</p><p>Human authority over model authority.</p></footer>
+      <footer className="site-footer"><p>Project Hope · Community preview · licensing pending · managed support available</p><p>Human authority over model authority.</p></footer>
+    </div>
+  );
+}
+
+function MfaChallengePanel({
+  challenge,
+  onAuthenticated,
+  onCancel,
+}: {
+  challenge: MfaChallenge;
+  onAuthenticated: (recoveryCodeUsed: boolean) => void;
+  onCancel: () => void;
+}) {
+  const [code, setCode] = useState("");
+  const [useRecoveryCode, setUseRecoveryCode] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const result = await request("/api/v1/auth/mfa/challenge/", {
+        method: "POST",
+        body: JSON.stringify({ challenge: challenge.challenge, code }),
+      });
+      onAuthenticated(Boolean(result?.recoveryCodeUsed));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to verify this sign-in.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="invitation-acceptance mfa-challenge" aria-labelledby="mfa-challenge-title">
+      <div className="invitation-visual"><span aria-hidden="true">2</span><p>Your password is one step. Your authenticator keeps the door closed.</p></div>
+      <div className="invitation-card">
+        <p className="eyebrow">Two-step verification</p>
+        <h2 id="mfa-challenge-title">Confirm it’s you.</h2>
+        <p className="invitation-lede">Enter the current six-digit code from your authenticator app. This private challenge expires in about {Math.max(1, Math.round(challenge.expiresInSeconds / 60))} minutes.</p>
+        <form className="invitation-form" onSubmit={submit}>
+          <label className="standalone-field">
+            {useRecoveryCode ? "Recovery code" : "Authenticator code"}
+            <input
+              autoComplete="one-time-code"
+              autoFocus
+              inputMode={useRecoveryCode ? "text" : "numeric"}
+              maxLength={useRecoveryCode ? 16 : 6}
+              onChange={(event) => setCode(event.target.value)}
+              pattern={useRecoveryCode ? "[A-Za-z2-9- ]{10,16}" : "[0-9]{6}"}
+              placeholder={useRecoveryCode ? "XXXXX-XXXXX" : "000000"}
+              required
+              value={code}
+            />
+          </label>
+          {error && <p className="form-error" role="alert">{error}</p>}
+          <div className="form-actions">
+            <button aria-busy={busy} className="button primary" disabled={busy} type="submit">{busy ? "Verifying…" : "Verify and sign in"}</button>
+            <button className="button secondary" disabled={busy} type="button" onClick={() => { setUseRecoveryCode(!useRecoveryCode); setCode(""); setError(""); }}>{useRecoveryCode ? "Use authenticator code" : "Use a recovery code"}</button>
+            <button className="text-button" disabled={busy} type="button" onClick={onCancel}>Back to sign in</button>
+          </div>
+        </form>
+      </div>
+    </section>
+  );
+}
+
+function SecurityPanel({ mfa, onChanged }: { mfa?: MfaStatus; onChanged: (mfa: MfaStatus) => Promise<void> }) {
+  const state = mfa ?? { enabled: false, required: false, enrollmentRequired: false, enabledAt: null, recoveryCodesRemaining: 0 };
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [code, setCode] = useState("");
+  const [enrollment, setEnrollment] = useState<MfaEnrollment | null>(null);
+  const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  async function startSetup(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await request("/api/v1/auth/mfa/enrollment/", {
+        method: "POST",
+        body: JSON.stringify({ current_password: currentPassword }),
+      }) as MfaEnrollment;
+      setEnrollment(result);
+      setCode("");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to start two-step verification setup.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmSetup(event: FormEvent) {
+    event.preventDefault();
+    if (!enrollment) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await request("/api/v1/auth/mfa/enrollment/confirm/", {
+        method: "POST",
+        body: JSON.stringify({ enrollment_token: enrollment.enrollmentToken, code }),
+      });
+      setEnrollment(null);
+      setRecoveryCodes(Array.isArray(result.recoveryCodes) ? result.recoveryCodes : []);
+      setCurrentPassword("");
+      setCode("");
+      setNotice("Two-step verification is enabled. Save every recovery code now; they are shown only once.");
+      await onChanged(result.mfa as MfaStatus);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to confirm this authenticator.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function manageSecurity(action: "recovery-codes" | "disable") {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await request(`/api/v1/auth/mfa/${action}/`, {
+        method: "POST",
+        body: JSON.stringify({ current_password: currentPassword, code }),
+      });
+      setCurrentPassword("");
+      setCode("");
+      await onChanged(result.mfa as MfaStatus);
+      if (action === "recovery-codes") {
+        setRecoveryCodes(Array.isArray(result.recoveryCodes) ? result.recoveryCodes : []);
+        setNotice("New recovery codes created. Every earlier code is now invalid.");
+      } else {
+        setRecoveryCodes([]);
+        setNotice("Two-step verification is disabled. Set it up again before accessing workspace data when your organization requires it.");
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to update account security.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copyRecoveryCodes() {
+    try {
+      await navigator.clipboard.writeText(recoveryCodes.join("\n"));
+      setNotice("Recovery codes copied. Store them in a password manager or another private place.");
+    } catch {
+      setError("Copy was unavailable. Select and save the codes manually.");
+    }
+  }
+
+  function downloadRecoveryCodes() {
+    const blob = new Blob([
+      "Project Hope recovery codes\n\nEach code works once. Keep these private.\n\n",
+      recoveryCodes.join("\n"),
+      "\n",
+    ], { type: "text/plain;charset=utf-8" });
+    const href = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = href;
+    anchor.download = "project-hope-recovery-codes.txt";
+    anchor.click();
+    URL.revokeObjectURL(href);
+  }
+
+  return (
+    <div className="security-panel">
+      <div className="security-heading">
+        <div><p className="eyebrow">Account protection</p><h3 className="module-title">Two-step verification</h3><p className="module-lede">Use any standards-based authenticator app. Project Hope never sends the setup secret to an external QR service.</p></div>
+        <span className={`security-status ${state.enabled ? "enabled" : "attention"}`}>{state.enabled ? "Protected" : state.required ? "Setup required" : "Not enabled"}</span>
+      </div>
+      {state.enrollmentRequired && <div className="security-required" role="alert"><strong>Protect this account before continuing.</strong><p>Your deployment requires two-step verification before organization data can open.</p></div>}
+      {notice && <p className="team-notice" role="status">{notice}</p>}
+      {error && <p className="form-error" role="alert">{error}</p>}
+
+      {recoveryCodes.length > 0 && (
+        <section className="recovery-code-card" aria-labelledby="recovery-code-title">
+          <p className="eyebrow">Shown once</p>
+          <h4 id="recovery-code-title">Save your recovery codes.</h4>
+          <p>Each code can sign you in once if your authenticator is unavailable. Project Hope stores only keyed hashes and cannot show these codes again.</p>
+          <ul>{recoveryCodes.map((recoveryCode) => <li key={recoveryCode}><code>{recoveryCode}</code></li>)}</ul>
+          <div className="form-actions"><button className="button primary compact" type="button" onClick={() => void copyRecoveryCodes()}>Copy codes</button><button className="button secondary compact" type="button" onClick={downloadRecoveryCodes}>Download text file</button><button className="text-button" type="button" onClick={() => { setRecoveryCodes([]); setNotice("Recovery codes acknowledged. You can create a new set at any time."); }}>I saved them</button></div>
+        </section>
+      )}
+
+      {!state.enabled && !enrollment && recoveryCodes.length === 0 && (
+        <form className="security-form" onSubmit={startSetup}>
+          <div><h4>Start with your password.</h4><p>Re-enter your password so another person using an unlocked device cannot add their authenticator.</p></div>
+          <label>Current password<input autoComplete="current-password" required type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></label>
+          <button aria-busy={busy} className="button primary" disabled={busy} type="submit">{busy ? "Preparing…" : "Set up two-step verification"}</button>
+        </form>
+      )}
+
+      {!state.enabled && enrollment && (
+        <div className="mfa-enrollment">
+          <div className="mfa-qr"><img alt="Authenticator setup QR code containing the private Project Hope account key" src={enrollment.qrCodeDataUrl} /><small>Private setup image · expires in about {Math.max(1, Math.round(enrollment.expiresInSeconds / 60))} minutes</small></div>
+          <form className="security-form" onSubmit={confirmSetup}>
+            <div><h4>Connect your authenticator.</h4><p>Scan the QR code, or enter this key manually:</p><code className="manual-secret">{enrollment.formattedSecret}</code><p className="form-hint">Treat this key like a password. Project Hope encrypts it at rest and will not show it after setup.</p></div>
+            <label>Six-digit authenticator code<input autoComplete="one-time-code" inputMode="numeric" maxLength={6} pattern="[0-9]{6}" placeholder="000000" required value={code} onChange={(event) => setCode(event.target.value)} /></label>
+            <div className="form-actions"><button aria-busy={busy} className="button primary" disabled={busy} type="submit">{busy ? "Checking…" : "Verify and turn on"}</button><button className="button secondary" disabled={busy} type="button" onClick={() => { setEnrollment(null); setCode(""); }}>Start over</button></div>
+          </form>
+        </div>
+      )}
+
+      {state.enabled && recoveryCodes.length === 0 && (
+        <div className="security-management">
+          <div className="security-facts"><article><span>Authenticator</span><strong>Enabled</strong><small>{state.enabledAt ? `Since ${new Date(state.enabledAt).toLocaleDateString()}` : "Active"}</small></article><article><span>Recovery codes</span><strong>{state.recoveryCodesRemaining}</strong><small>Unused codes remaining</small></article><article><span>Session safety</span><strong>Active</strong><small>Security changes revoke older sessions and app tokens</small></article></div>
+          <form className="security-form" onSubmit={(event) => event.preventDefault()}>
+            <div><h4>Make a security change.</h4><p>Enter your password and either a current authenticator code or an unused recovery code.</p></div>
+            <label>Current password<input autoComplete="current-password" required type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></label>
+            <label>Verification code<input autoComplete="one-time-code" maxLength={16} placeholder="000000 or XXXXX-XXXXX" required value={code} onChange={(event) => setCode(event.target.value)} /></label>
+            <div className="form-actions"><button aria-busy={busy} className="button primary" disabled={busy || !currentPassword || !code} type="button" onClick={() => void manageSecurity("recovery-codes")}>Create new recovery codes</button><button aria-busy={busy} className="button secondary danger-outline" disabled={busy || !currentPassword || !code} type="button" onClick={() => void manageSecurity("disable")}>Turn off two-step verification</button></div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

@@ -31,7 +31,7 @@ Source of truth: the Project Hope research report supplied as `Project Hope_ A Z
 
 ### Local authentication versus Keycloak
 
-The report recommends Keycloak, while a useful first milestone must also start with one command on a developer machine. Phase 1 therefore implements Django session authentication with a custom email-based user model and includes Keycloak in the local service topology as the OIDC integration boundary. Keycloak federation and token validation are a follow-on identity milestone; business authorization is already independent of the authentication mechanism.
+The report recommends Keycloak, while a useful first milestone must also start with one command on a developer machine. Phase 1 therefore implemented Django session authentication with a custom email-based user model and included Keycloak in the local service topology as the OIDC integration boundary. Version 1.7 adds built-in TOTP two-step verification and recovery without making a hosted identity service mandatory. Keycloak federation and token validation remain optional follow-on SSO work; business authorization is independent of the authentication mechanism.
 
 ### PostgreSQL versus zero-dependency tests
 
@@ -44,4 +44,3 @@ Identity and audit are separate Django apps now. Organization-scoped services ar
 ### “Zero cost” meaning
 
 The platform has no required paid software, hosted API, or cloud subscription. Hardware, electricity, connectivity, domain, email delivery, and public telephone access still have real costs and are explicitly outside the software guarantee.
-

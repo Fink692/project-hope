@@ -2,7 +2,7 @@
 
 Project Hope should hold only data tied to a defined programme purpose. Optional fields are visibly optional. Organization boundaries, role checks, consent records, legal holds, and append-only security events apply across the implemented operational modules.
 
-The platform can store identity and membership data, contacts, volunteers, schedules, documents and extracted passages, minimized mailbox records and approved drafts, grants, resources, translations, analytics, voice-workflow metadata, donor snapshots, plugin/API configuration, and reviewable AI workflow records. Deployments must enable only the modules they can govern, publish their own purposes and retention periods, and avoid importing real data until the corresponding access, backup, export, and incident procedures pass staging verification.
+The platform can store identity and membership data, encrypted authenticator secrets, keyed recovery-code hashes, contacts, volunteers, schedules, documents and extracted passages, minimized mailbox records and approved drafts, grants, resources, translations, analytics, voice-workflow metadata, donor snapshots, plugin/API configuration, and reviewable AI workflow records. Plaintext recovery codes are shown once and are not retained by Project Hope. Deployments must enable only the modules they can govern, publish their own purposes and retention periods, and avoid importing real data until the corresponding access, backup, export, and incident procedures pass staging verification.
 
 The public Founding 10 form is a separate acquisition purpose. Its fields, confirmation boundary, access controls, and automated retention are documented in [the pilot application privacy notice](pilot-applications.md).
 

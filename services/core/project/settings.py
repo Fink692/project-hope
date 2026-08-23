@@ -1,5 +1,8 @@
-from pathlib import Path
+import base64
+import binascii
+import hashlib
 import os
+from pathlib import Path
 from urllib.parse import parse_qsl, unquote, urlparse
 
 from django.core.exceptions import ImproperlyConfigured
@@ -121,10 +124,10 @@ AUTH_USER_MODEL = "identity.User"
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "identity.authentication.ExpiringTokenAuthentication",
-        "rest_framework.authentication.SessionAuthentication",
+        "identity.authentication.SecurityVersionSessionAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
-        "rest_framework.permissions.IsAuthenticated",
+        "identity.permissions.IsAuthenticatedAndMfaCompliant",
     ],
     "DEFAULT_RENDERER_CLASSES": (
         [
@@ -160,6 +163,12 @@ REST_FRAMEWORK = {
             "DRF_AUTH_LOGIN_ACCOUNT_RATE", "10/minute"
         ),
         "auth_login_ip": os.environ.get("DRF_AUTH_LOGIN_IP_RATE", "60/minute"),
+        "auth_mfa_challenge": os.environ.get(
+            "DRF_AUTH_MFA_CHALLENGE_RATE", "10/minute"
+        ),
+        "auth_mfa_enrollment": os.environ.get(
+            "DRF_AUTH_MFA_ENROLLMENT_RATE", "10/hour"
+        ),
     },
 }
 
@@ -259,6 +268,57 @@ PASSWORD_RESET_TIMEOUT = int(os.environ.get("PASSWORD_RESET_TIMEOUT", "3600"))
 PROJECT_HOPE_API_TOKEN_MAX_AGE_SECONDS = int(
     os.environ.get("PROJECT_HOPE_API_TOKEN_MAX_AGE_SECONDS", "2592000")
 )
+PROJECT_HOPE_MFA_REQUIRED = env_bool(
+    "PROJECT_HOPE_MFA_REQUIRED", ENVIRONMENT == "production"
+)
+PROJECT_HOPE_MFA_ISSUER = os.environ.get(
+    "PROJECT_HOPE_MFA_ISSUER", "Project Hope"
+).strip()
+PROJECT_HOPE_MFA_LOGIN_CHALLENGE_MAX_AGE_SECONDS = int(
+    os.environ.get("PROJECT_HOPE_MFA_LOGIN_CHALLENGE_MAX_AGE_SECONDS", "300")
+)
+PROJECT_HOPE_MFA_ENROLLMENT_MAX_AGE_SECONDS = int(
+    os.environ.get("PROJECT_HOPE_MFA_ENROLLMENT_MAX_AGE_SECONDS", "600")
+)
+PROJECT_HOPE_MFA_TOTP_VALID_WINDOW = int(
+    os.environ.get("PROJECT_HOPE_MFA_TOTP_VALID_WINDOW", "1")
+)
+PROJECT_HOPE_MFA_RECOVERY_CODE_COUNT = int(
+    os.environ.get("PROJECT_HOPE_MFA_RECOVERY_CODE_COUNT", "10")
+)
+mfa_encryption_keys = os.environ.get("PROJECT_HOPE_MFA_ENCRYPTION_KEYS", "").strip()
+if not mfa_encryption_keys:
+    if ENVIRONMENT == "production":
+        raise ImproperlyConfigured(
+            "PROJECT_HOPE_MFA_ENCRYPTION_KEYS is required in production."
+        )
+    mfa_encryption_keys = base64.urlsafe_b64encode(
+        hashlib.sha256(f"project-hope-mfa:{SECRET_KEY}".encode()).digest()
+    ).decode()
+PROJECT_HOPE_MFA_ENCRYPTION_KEYS = tuple(
+    key.strip() for key in mfa_encryption_keys.split(",") if key.strip()
+)
+for mfa_encryption_key in PROJECT_HOPE_MFA_ENCRYPTION_KEYS:
+    try:
+        decoded_mfa_key = base64.b64decode(
+            mfa_encryption_key.encode(), altchars=b"-_", validate=True
+        )
+    except (ValueError, binascii.Error) as exc:
+        raise ImproperlyConfigured(
+            "Every PROJECT_HOPE_MFA_ENCRYPTION_KEYS value must be a Fernet key."
+        ) from exc
+    if len(decoded_mfa_key) != 32:
+        raise ImproperlyConfigured(
+            "Every PROJECT_HOPE_MFA_ENCRYPTION_KEYS value must decode to 32 bytes."
+        )
+if not PROJECT_HOPE_MFA_ISSUER:
+    raise ImproperlyConfigured("PROJECT_HOPE_MFA_ISSUER cannot be empty.")
+if PROJECT_HOPE_MFA_TOTP_VALID_WINDOW not in {0, 1}:
+    raise ImproperlyConfigured("PROJECT_HOPE_MFA_TOTP_VALID_WINDOW must be 0 or 1.")
+if not 8 <= PROJECT_HOPE_MFA_RECOVERY_CODE_COUNT <= 20:
+    raise ImproperlyConfigured(
+        "PROJECT_HOPE_MFA_RECOVERY_CODE_COUNT must be between 8 and 20."
+    )
 PROJECT_HOPE_PASSWORD_RESET_QUEUE_MAX_AGE_SECONDS = int(
     os.environ.get("PROJECT_HOPE_PASSWORD_RESET_QUEUE_MAX_AGE_SECONDS", "900")
 )
@@ -282,6 +342,11 @@ PROJECT_HOPE_PILOT_INACTIVE_RETENTION_DAYS = int(
 )
 
 valkey_url = os.environ.get("VALKEY_URL", "")
+if ENVIRONMENT == "production" and not valkey_url:
+    raise ImproperlyConfigured(
+        "VALKEY_URL is required in production for shared throttles and one-time "
+        "authentication challenges."
+    )
 if valkey_url:
     CACHES = {
         "default": {

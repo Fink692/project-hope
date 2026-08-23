@@ -41,6 +41,29 @@ class LoginSerializer(serializers.Serializer):
         return value.strip().lower()
 
 
+class MfaChallengeSerializer(serializers.Serializer):
+    challenge = serializers.CharField(max_length=2048, trim_whitespace=True)
+    code = serializers.CharField(max_length=32, trim_whitespace=True)
+
+
+class MfaEnrollmentBeginSerializer(serializers.Serializer):
+    current_password = serializers.CharField(
+        max_length=256, trim_whitespace=False, write_only=True
+    )
+
+
+class MfaEnrollmentConfirmSerializer(serializers.Serializer):
+    enrollment_token = serializers.CharField(max_length=4096, trim_whitespace=True)
+    code = serializers.RegexField(r"^[0-9]{6}$", trim_whitespace=True)
+
+
+class MfaStepUpSerializer(serializers.Serializer):
+    current_password = serializers.CharField(
+        max_length=256, trim_whitespace=False, write_only=True
+    )
+    code = serializers.CharField(max_length=32, trim_whitespace=True)
+
+
 class PasswordResetRequestSerializer(serializers.Serializer):
     email = serializers.EmailField()
 
