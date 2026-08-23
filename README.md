@@ -35,6 +35,8 @@ The built-in application requires explicit consent, verifies every email, preven
 |---|---|
 | Installing the app | [Download the latest desktop installers](https://github.com/Fink692/project-hope/releases/latest) |
 | Running the Founding 10 programme | [Commercial readiness and launch runbook](docs/commercial-readiness.md) |
+| Announcing the release | [LinkedIn release post](docs/launch/linkedin-release-post.md) |
+| Finding the first pilot partners | [Permission-first outreach kit](docs/launch/founding-10-outreach-kit.md) |
 | Understanding the charity experience | [Project Hope as an app](docs/DISTRIBUTION_FOR_CHARITIES.md) |
 | Deploying a workspace for a charity | [Production deployment guide](docs/operations/production-deployment.md) |
 | Running a local training workspace | [Getting Started for Charities](docs/GETTING_STARTED_FOR_CHARITIES.md) |

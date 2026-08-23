@@ -161,6 +161,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - name: Validate public launch materials
+        run: python3 scripts/check_launch_docs.py
       - name: Validate charity setup helper
         run: bash -n scripts/project-hope.sh && bash scripts/project-hope.sh help
       - name: Validate Windows helper help path

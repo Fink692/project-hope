@@ -2,6 +2,12 @@
 
 Project Hope's source is publicly visible, but no software license has yet been approved. Reuse rights must not be assumed. The intended Community path is self-hosted and zero-cost after the copyright owner approves its licensing terms; the paid product is a managed service that removes setup and maintenance work for charities.
 
+Companion launch materials:
+
+- [Founding 10 outreach kit](launch/founding-10-outreach-kit.md) — permission-based messages, partner channels, qualification, and evidence rules;
+- [Owner launch decisions](launch/owner-launch-decisions.md) — the hosting, legal, privacy, billing, and signing choices that cannot be inferred in code; and
+- [LinkedIn release post](launch/linkedin-release-post.md) — verified public release copy and publishing notes.
+
 ## The offer
 
 | Path | Price | Included |
@@ -37,6 +43,7 @@ The equivalent authenticated endpoint is `GET /api/v1/pilot-applications/metrics
 
 ## Public launch checklist
 
+- Record the owner decisions in [the launch decision handoff](launch/owner-launch-decisions.md).
 - Deploy the production topology behind a real HTTPS domain.
 - Set `PROJECT_HOPE_PUBLIC_URL` to that exact public origin.
 - Configure an authenticated transactional SMTP service and test delivery, confirmation, expiry, and spam placement.
@@ -47,6 +54,8 @@ The equivalent authenticated endpoint is `GET /api/v1/pilot-applications/metrics
 - Confirm backup encryption, restore, incident response, and application-retention execution.
 - Use a campaign URL such as `https://YOUR-DOMAIN/?utm_source=linkedin&utm_medium=social&utm_campaign=founding-10#founding-10`.
 - Respond personally, record status truthfully, and never manufacture applicant or customer counts.
+
+Use the [permission-first outreach kit](launch/founding-10-outreach-kit.md) after the public origin and email-confirmation path pass this checklist. Until then, use the private LinkedIn-message call to action rather than advertising a non-operational application URL.
 
 ## Operating the funnel
 

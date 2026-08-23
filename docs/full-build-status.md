@@ -39,7 +39,7 @@ Project Hope is a broad, installable product baseline—not a field-validated fi
 | Mobile | Expo client, secure token storage, connected tenant API surfaces, fail-closed production URL configuration, and upgrade cleanup for legacy local record/note caches | Organization-owned Apple/Google signing, store review, device matrix and mobile accessibility acceptance |
 | Desktop | Windows/macOS/Linux Electron installers, first-run workspace URL, update metadata | Organization-owned signing/notarization and warning-free distribution; public generic installers are currently unsigned |
 | Operations | Development/production Compose, Gunicorn/Caddy, worker, local models, backup/restore scripts, setup helpers | Live production environment, pinned container digests, monitored backups, completed restore drill, incident/support rota |
-| Managed commercial service | Founding Partner positioning and privacy-minimized pilot funnel | Hosted control plane, billing lifecycle, service terms/DPA, support tooling, operating entity/account, and verified paying customers |
+| Managed commercial service | Founding Partner positioning, privacy-minimized pilot funnel, permission-first outreach kit, and explicit owner launch-decision handoff | Live managed hosting, service terms/DPA, support operations, operating entity/account, payment evidence, and verified paying customers |
 | Repository licensing | Public source code | **No LICENSE file exists.** GitHub reports no license. The copyright owner must choose and approve a community/commercial licensing strategy before “open source” or reuse rights are claimed |
 
 ## Verification evidence

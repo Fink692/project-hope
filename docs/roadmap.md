@@ -23,7 +23,7 @@ Project Hope has an implemented foundation and broad module baselines. The roadm
 
 ## Track D — managed product
 
-11. **Commercial operations — open.** Deploy a managed production environment, choose the legal/software license, publish service terms/privacy providers, add billing and support operations, and complete backup/restore and incident drills.
+11. **Commercial operations — open.** The release post, permission-first outreach kit, and owner decision handoff are ready. Deploy a managed production environment, choose the legal/software license, publish service terms/privacy providers, establish invoicing and support operations, and complete backup/restore and incident drills.
 12. **Founding 10 — 0/10 verified at the latest evidence check.** Acquire ten legitimate, email-verified charity applicants and distinguish applicants, qualified pilots, active pilots, converted/paying customers, and test fixtures. Only real external organizations count.
 
 The authoritative implementation and remaining gates are in [full-build-status.md](full-build-status.md).
