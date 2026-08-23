@@ -1,10 +1,8 @@
 # LinkedIn release post — Project Hope 1.5
 
-Replace `[FOUNDING_10_URL]` with the verified production application URL before posting.
-
 ---
 
-I’m incredibly proud to finally release Project Hope. 🌱
+I’m incredibly proud to finally release Project Hope 1.5. 🌱
 
 This has been a long build—not a weekend prototype, and not another AI demo looking for a problem.
 
@@ -29,7 +27,7 @@ The Founding Partner pilot is CAD $149/month after the workspace is live. There 
 
 If you work with a charity—or know someone who does—I would be grateful if you shared this with them.
 
-Apply for a Founding 10 place: [FOUNDING_10_URL]
+To ask about one of the Founding 10 places, send me a private LinkedIn message with “FOUNDING 10” and your charity’s name. I’ll reply privately with the next steps. Please don’t post personal, client, or service-user information in the comments.
 
 Explore the open project, release notes, and installers: https://github.com/Fink692/project-hope/releases/tag/v1.5.0
 
@@ -41,7 +39,7 @@ After a long time building quietly, it feels good to put Project Hope into the h
 
 Suggested first comment:
 
-> What I care about most is making the first experience easy. A charity should be able to install the app, sign in, and get useful work done without learning infrastructure. If your organization would be willing to test that promise honestly, I would love to hear from you: [FOUNDING_10_URL]
+> What I care about most is making the first experience easy. A charity should be able to install the app, sign in, and get useful work done without learning infrastructure. If your organization would be willing to test that promise honestly, send me a private message with “FOUNDING 10” and your charity’s name. Release: https://github.com/Fink692/project-hope/releases/tag/v1.5.0
 
 Suggested image alt text:
 
