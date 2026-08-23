@@ -1,12 +1,21 @@
+import json
+from datetime import timedelta
+from io import StringIO
+from urllib.parse import parse_qs, urlparse
+from unittest.mock import patch
+
+from django.core import mail
+from django.core.cache import cache
 from django.core import management
 from django.core.exceptions import ValidationError
-from django.test import TestCase
+from django.test import TestCase, override_settings
+from django.utils import timezone
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
 from audit.models import AuditEvent
 
-from .models import Membership, Organization, User
+from .models import Membership, Organization, PilotApplication, User
 
 
 class FoundationApiTests(TestCase):
@@ -216,3 +225,260 @@ class SeedCommandTests(TestCase):
         self.assertEqual(
             Membership.objects.filter(organization__slug="hope-demo").count(), 1
         )
+
+
+@override_settings(
+    EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+    PROJECT_HOPE_PUBLIC_URL="https://hope.example.org",
+)
+class PilotApplicationApiTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        self.payload = {
+            "contact_name": "Amina Hope",
+            "email": "AMINA@EXAMPLE.ORG",
+            "organization_name": "North Star Community Centre",
+            "website": "https://north-star.example.org",
+            "country_or_region": "Manitoba, Canada",
+            "team_size": "6-20",
+            "primary_need": "volunteers",
+            "plan_interest": "founding_partner",
+            "notes": "We coordinate 80 active volunteers.",
+            "consent_to_contact": True,
+            "source": "linkedin",
+            "utm_source": "linkedin",
+            "utm_medium": "social",
+            "utm_campaign": "founding-10",
+            "referrer": "https://www.linkedin.com/",
+            "company_website": "",
+        }
+
+    def submit(self, **overrides):
+        return self.client.post(
+            "/api/v1/pilot-applications/",
+            {**self.payload, **overrides},
+            format="json",
+        )
+
+    def verification_token(self):
+        link = next(
+            line
+            for line in mail.outbox[-1].body.splitlines()
+            if line.startswith("https://")
+        )
+        parsed = urlparse(link)
+        self.assertEqual(parsed.query, "")
+        return parse_qs(parsed.fragment)["pilot_token"][0]
+
+    def test_application_is_captured_normalized_and_verifiable(self):
+        response = self.submit()
+
+        self.assertEqual(response.status_code, 202, response.content)
+        self.assertEqual(
+            response.json(),
+            {
+                "detail": (
+                    "Application received. Check your email to confirm your request."
+                )
+            },
+        )
+        application = PilotApplication.objects.get()
+        self.assertEqual(application.email, "amina@example.org")
+        self.assertEqual(application.source, PilotApplication.Source.LINKEDIN)
+        self.assertEqual(application.privacy_version, PilotApplication.PRIVACY_VERSION)
+        self.assertIsNone(application.verified_at)
+        self.assertEqual(application.verification_email_attempts, 1)
+        self.assertIsNotNone(application.verification_email_sent_at)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ["amina@example.org"])
+
+        verified = self.client.post(
+            "/api/v1/pilot-applications/verify/",
+            {"token": self.verification_token()},
+            format="json",
+        )
+
+        self.assertEqual(verified.status_code, 200, verified.content)
+        application.refresh_from_db()
+        self.assertIsNotNone(application.verified_at)
+
+    def test_duplicate_submission_is_private_and_does_not_overwrite_lead(self):
+        first = self.submit()
+        second = self.submit(
+            contact_name="Someone Else",
+            organization_name="Overwrite Attempt",
+            email="amina@example.org",
+        )
+
+        self.assertEqual(first.status_code, 202)
+        self.assertEqual(second.status_code, 202)
+        self.assertEqual(first.json(), second.json())
+        self.assertEqual(PilotApplication.objects.count(), 1)
+        application = PilotApplication.objects.get()
+        self.assertEqual(application.contact_name, "Amina Hope")
+        self.assertEqual(application.organization_name, "North Star Community Centre")
+        self.assertEqual(application.submission_count, 2)
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_verified_duplicate_does_not_send_more_mail(self):
+        self.submit()
+        self.client.post(
+            "/api/v1/pilot-applications/verify/",
+            {"token": self.verification_token()},
+            format="json",
+        )
+
+        response = self.submit(email="amina@example.org")
+
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_consent_is_explicitly_required(self):
+        rejected = self.submit(consent_to_contact=False)
+        missing_payload = dict(self.payload)
+        missing_payload.pop("consent_to_contact")
+        missing = self.client.post(
+            "/api/v1/pilot-applications/", missing_payload, format="json"
+        )
+
+        self.assertEqual(rejected.status_code, 400)
+        self.assertEqual(missing.status_code, 400)
+        self.assertEqual(PilotApplication.objects.count(), 0)
+
+    def test_honeypot_returns_generic_success_without_storing_data(self):
+        response = self.submit(company_website="https://spam.example")
+
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(PilotApplication.objects.count(), 0)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_invalid_verification_token_is_rejected(self):
+        response = self.client.post(
+            "/api/v1/pilot-applications/verify/",
+            {"token": "not-a-signed-token"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(response.json().get("verified", False))
+
+    def test_failed_confirmation_mail_is_recorded_and_retried(self):
+        with self.assertLogs("identity.pilot", level="ERROR"):
+            with patch("identity.pilot.send_mail", side_effect=OSError("relay down")):
+                response = self.submit()
+
+        self.assertEqual(response.status_code, 202)
+        application = PilotApplication.objects.get()
+        self.assertEqual(application.verification_email_attempts, 1)
+        self.assertIsNone(application.verification_email_sent_at)
+        PilotApplication.objects.filter(id=application.id).update(
+            verification_email_last_attempt_at=timezone.now() - timedelta(minutes=16)
+        )
+        output = StringIO()
+
+        management.call_command("retry_pilot_verification_emails", stdout=output)
+
+        application.refresh_from_db()
+        self.assertEqual(json.loads(output.getvalue())["delivered"], 1)
+        self.assertEqual(application.verification_email_attempts, 2)
+        self.assertIsNotNone(application.verification_email_sent_at)
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_metrics_are_admin_only_and_contain_no_personal_data(self):
+        PilotApplication.objects.create(
+            contact_name="Verified Contact",
+            email="verified@example.org",
+            organization_name="Verified Charity",
+            team_size="2-5",
+            primary_need="operations",
+            plan_interest="founding_partner",
+            consent_to_contact=True,
+            verified_at=timezone.now(),
+            status=PilotApplication.Status.QUALIFIED,
+        )
+        PilotApplication.objects.create(
+            contact_name="Pending Contact",
+            email="pending@example.org",
+            organization_name="Pending Charity",
+            team_size="1",
+            primary_need="impact",
+            plan_interest="community",
+            consent_to_contact=True,
+        )
+
+        unauthorized = self.client.get("/api/v1/pilot-applications/metrics/")
+        self.assertIn(unauthorized.status_code, (401, 403))
+        admin = User.objects.create_superuser("admin@example.org", "Admin-password-123")
+        self.client.force_authenticate(user=admin)
+        response = self.client.get("/api/v1/pilot-applications/metrics/")
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["verified"], 1)
+        self.assertEqual(response.json()["qualified"], 1)
+        self.assertEqual(response.json()["remaining"], 9)
+        serialized = json.dumps(response.json())
+        self.assertNotIn("verified@example.org", serialized)
+        self.assertNotIn("Verified Contact", serialized)
+
+    def test_pilot_metrics_command_reports_verified_people_only(self):
+        PilotApplication.objects.create(
+            contact_name="Pilot Contact",
+            email="pilot@example.org",
+            organization_name="Pilot Charity",
+            team_size="2-5",
+            primary_need="operations",
+            plan_interest="founding_partner",
+            consent_to_contact=True,
+            verified_at=timezone.now(),
+            status=PilotApplication.Status.PILOT,
+        )
+        output = StringIO()
+
+        management.call_command("pilot_metrics", stdout=output)
+
+        metrics = json.loads(output.getvalue())
+        self.assertEqual(metrics["verified"], 1)
+        self.assertEqual(metrics["active_pilots"], 1)
+        self.assertEqual(metrics["remaining"], 9)
+
+    def test_retention_command_previews_then_purges_only_expired_applications(self):
+        old = timezone.now() - timedelta(days=400)
+        expired = PilotApplication.objects.create(
+            contact_name="Expired Contact",
+            email="expired@example.org",
+            organization_name="Expired Charity",
+            team_size="1",
+            primary_need="operations",
+            plan_interest="community",
+            consent_to_contact=True,
+        )
+        active = PilotApplication.objects.create(
+            contact_name="Active Pilot",
+            email="active@example.org",
+            organization_name="Active Charity",
+            team_size="2-5",
+            primary_need="operations",
+            plan_interest="founding_partner",
+            consent_to_contact=True,
+            verified_at=old,
+            status=PilotApplication.Status.PILOT,
+        )
+        PilotApplication.objects.filter(id__in=[expired.id, active.id]).update(
+            created_at=old, updated_at=old
+        )
+        preview_output = StringIO()
+
+        management.call_command("purge_pilot_applications", stdout=preview_output)
+
+        self.assertEqual(json.loads(preview_output.getvalue())["matched"], 1)
+        self.assertEqual(PilotApplication.objects.count(), 2)
+
+        execute_output = StringIO()
+        management.call_command(
+            "purge_pilot_applications", execute=True, stdout=execute_output
+        )
+
+        self.assertEqual(json.loads(execute_output.getvalue())["deleted"], 1)
+        self.assertFalse(PilotApplication.objects.filter(id=expired.id).exists())
+        self.assertTrue(PilotApplication.objects.filter(id=active.id).exists())

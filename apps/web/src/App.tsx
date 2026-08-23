@@ -38,6 +38,25 @@ type FormField = {
 type RecordMap = Record<string, unknown>;
 type InstallPromptEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: "accepted" | "dismissed" }> };
 
+type PilotFormValues = {
+  contact_name: string;
+  email: string;
+  organization_name: string;
+  website: string;
+  country_or_region: string;
+  team_size: string;
+  primary_need: string;
+  plan_interest: string;
+  notes: string;
+  consent_to_contact: boolean;
+  source: string;
+  utm_source: string;
+  utm_medium: string;
+  utm_campaign: string;
+  referrer: string;
+  company_website: string;
+};
+
 const modules: ModuleDefinition[] = [
   { id: "crm", label: "CRM", description: "People, households, consent, and relationships", endpoint: "contacts", color: "sage" },
   { id: "volunteers", label: "Volunteers", description: "Applications, skills, availability, and onboarding", endpoint: "volunteer-applications", color: "blue" },
@@ -137,6 +156,8 @@ function App() {
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [loginBusy, setLoginBusy] = useState(false);
+  const [pilotVerification, setPilotVerification] = useState<"idle" | "checking" | "confirmed" | "error">("idle");
+  const [pilotVerificationMessage, setPilotVerificationMessage] = useState("");
 
   const currentOrganization = useMemo(
     () => session?.organizations.find(({ organization }) => organization.slug === selectedOrganization)?.organization
@@ -151,6 +172,30 @@ function App() {
     }
     window.addEventListener("beforeinstallprompt", rememberInstallPrompt);
     return () => window.removeEventListener("beforeinstallprompt", rememberInstallPrompt);
+  }, []);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const fragmentParams = new URLSearchParams(url.hash.replace(/^#/, ""));
+    const token = fragmentParams.get("pilot_token") ?? url.searchParams.get("pilot_token");
+    if (!token) return;
+
+    url.searchParams.delete("pilot_token");
+    url.hash = "founding-10";
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    setPilotVerification("checking");
+    request("/api/v1/pilot-applications/verify/", {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    })
+      .then((body) => {
+        setPilotVerification("confirmed");
+        setPilotVerificationMessage(typeof body?.detail === "string" ? body.detail : "Your email is confirmed.");
+      })
+      .catch((error) => {
+        setPilotVerification("error");
+        setPilotVerificationMessage(error instanceof Error ? error.message : "Unable to confirm this email.");
+      });
   }, []);
 
   useEffect(() => {
@@ -215,20 +260,23 @@ function App() {
         <nav aria-label="Primary navigation">
           <a aria-current={activeModule === "overview" ? "page" : undefined} className={activeModule === "overview" ? "active" : ""} href="#overview" onClick={() => setActiveModule("overview")}>Overview</a>
           <a href="#workspace" onClick={() => setActiveModule(session ? "crm" : "overview")}>Workspace</a>
+          {!session && <a href="#founding-10">Founding 10</a>}
           {!session && <a href="#getting-started">Get started</a>}
           <a href="#roadmap">Principles</a>
         </nav>
       </header>
 
       <main id="main-content">
+        {pilotVerification !== "idle" && <div className={`verification-banner ${pilotVerification === "error" ? "error" : ""}`} role={pilotVerification === "error" ? "alert" : "status"} aria-live="polite"><strong>{pilotVerification === "checking" ? "Confirming your email…" : pilotVerification === "confirmed" ? "Email confirmed" : "Confirmation problem"}</strong>{pilotVerificationMessage && <span>{pilotVerificationMessage}</span>}</div>}
         <section className="hero" id="overview" aria-labelledby="hero-title">
           <div>
-            <p className="eyebrow">Local-first · human-led</p>
+            <p className="eyebrow">Charity-first · human-led</p>
             <h2 id="hero-title">A calm, capable home for community work.</h2>
             <p className="hero-copy">Project Hope keeps charity data under the organization’s control, makes permissions visible, and leaves every consequential decision with a human.</p>
             <div className="hero-actions">
-              <a className="button primary" href={session ? "#workspace" : "#sign-in"} onClick={() => session ? setActiveModule("crm") : undefined}>{session ? "Open workspace" : "Sign in to workspace"}</a>
-              {!session && <a className="button secondary" href="#download">Install the app</a>}
+              <a className="button primary" href={session ? "#workspace" : "#founding-10"} onClick={() => session ? setActiveModule("crm") : undefined}>{session ? "Open workspace" : "Apply for Founding 10"}</a>
+              {!session && <a className="button secondary" href="#sign-in">Sign in</a>}
+              {!session && <a className="button secondary" href="#download">Download the app</a>}
               <a className="button secondary" href="#roadmap">See the guardrails</a>
             </div>
           </div>
@@ -238,6 +286,8 @@ function App() {
             <dl className="health-details"><div><dt>Core service</dt><dd>{health.status}</dd></div><div><dt>Database</dt><dd>{health.database}</dd></div><div><dt>AI runtime</dt><dd>{health.ai?.status ?? "unknown"}{health.ai?.runtime && health.ai.runtime !== "ollama" ? ` · ${health.ai.runtime}` : ""}</dd></div></dl>
           </aside>
         </section>
+
+        {!session && <FoundingPilotSection />}
 
         {!session && (
           <section className="section sign-in-section" id="sign-in" aria-labelledby="sign-in-title">
@@ -278,8 +328,119 @@ function App() {
 
         <section className="section roadmap-section" id="roadmap" aria-labelledby="roadmap-title"><div className="section-heading"><div><p className="eyebrow">Guardrails across the product</p><h2 id="roadmap-title">Small steps, clear proof.</h2></div><p>Every module earns its place by passing safety, accessibility, and operational checks.</p></div><ol className="roadmap-list"><li className="complete"><span>01</span><div><strong>Foundation</strong><p>Identity, tenancy, authorization, audit, and health.</p></div><b>Complete</b></li><li><span>02</span><div><strong>Core operations</strong><p>CRM, volunteers, scheduling, documents, and reporting.</p></div><b>Ready</b></li><li><span>03</span><div><strong>Bounded assistance</strong><p>Email, grants, translation, resources, and reviewable AI.</p></div><b>Human review</b></li><li><span>04</span><div><strong>Expansion</strong><p>PWA, voice, donor cohorts, plugins, and native clients.</p></div><b>Controlled</b></li></ol></section>
       </main>
-      <footer className="site-footer"><p>Project Hope · self-hosted by design</p><p>Human authority over model authority.</p></footer>
+      <footer className="site-footer"><p>Project Hope · free self-hosted core · managed support available</p><p>Human authority over model authority.</p></footer>
     </div>
+  );
+}
+
+function initialPilotForm(): PilotFormValues {
+  const params = new URLSearchParams(window.location.search);
+  const utmSource = (params.get("utm_source") ?? "").slice(0, 120);
+  const source = utmSource.toLowerCase().includes("linkedin")
+    ? "linkedin"
+    : document.referrer
+      ? "referral"
+      : "website";
+  return {
+    contact_name: "",
+    email: "",
+    organization_name: "",
+    website: "",
+    country_or_region: "",
+    team_size: "",
+    primary_need: "",
+    plan_interest: "founding_partner",
+    notes: "",
+    consent_to_contact: false,
+    source,
+    utm_source: utmSource,
+    utm_medium: (params.get("utm_medium") ?? "").slice(0, 120),
+    utm_campaign: (params.get("utm_campaign") ?? "").slice(0, 160),
+    referrer: document.referrer.slice(0, 500),
+    company_website: "",
+  };
+}
+
+function FoundingPilotSection() {
+  const [values, setValues] = useState<PilotFormValues>(initialPilotForm);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+
+  function update<K extends keyof PilotFormValues>(name: K, value: PilotFormValues[K]) {
+    setValues((current) => ({ ...current, [name]: value }));
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      await request("/api/v1/pilot-applications/", {
+        method: "POST",
+        body: JSON.stringify(values),
+      });
+      setSubmitted(true);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to send your application.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="section pilot-section" id="founding-10" aria-labelledby="pilot-title">
+      <div className="pilot-layout">
+        <div className="pilot-pitch">
+          <p className="eyebrow">Now accepting applications</p>
+          <h2 id="pilot-title">Be one of the Founding 10.</h2>
+          <p className="pilot-lede">Ten charities will help shape a simpler way to run community work—and receive a managed workspace with hands-on launch support.</p>
+          <div className="pilot-price">
+            <span>Founding Partner pilot</span>
+            <div><sup>CAD</sup><strong>$149</strong><small>/ month</small></div>
+            <p>Charged only after your workspace is live. No setup fee during the pilot. Cancel anytime.</p>
+          </div>
+          <ul className="pilot-benefits">
+            <li><span aria-hidden="true">✓</span><div><strong>We launch it with you</strong><small>Domain, workspace, first admin, and guided onboarding.</small></div></li>
+            <li><span aria-hidden="true">✓</span><div><strong>One app, kept current</strong><small>Managed updates, encrypted backups, and human support.</small></div></li>
+            <li><span aria-hidden="true">✓</span><div><strong>Your data stays yours</strong><small>Exportable records, clear permissions, and a free self-hosted edition.</small></div></li>
+          </ul>
+          <p className="pilot-fine-print">Applying is free and does not create a payment obligation. Fit, scope, hosting region, and data terms are confirmed in writing before launch.</p>
+        </div>
+
+        <div className="pilot-form-card">
+          {submitted ? (
+            <div className="pilot-success" role="status" aria-live="polite">
+              <span className="success-mark" aria-hidden="true">✓</span>
+              <p className="eyebrow">Application received</p>
+              <h3>Check your inbox.</h3>
+              <p>Open the confirmation link we sent to <strong>{values.email}</strong>. We count only confirmed applications and review every one personally.</p>
+              <button className="button secondary compact" type="button" onClick={() => { setValues(initialPilotForm()); setSubmitted(false); }}>Apply for another charity</button>
+            </div>
+          ) : (
+            <form className="pilot-form" onSubmit={submit} aria-label="Founding 10 application">
+              <div className="pilot-form-heading"><div><p className="eyebrow">Two-minute application</p><h3>Tell us where help would matter most.</h3></div><span>10 places</span></div>
+              <div className="pilot-fields">
+                <label>Your name<input autoComplete="name" maxLength={160} required value={values.contact_name} onChange={(event) => update("contact_name", event.target.value)} /></label>
+                <label>Work email<input autoComplete="email" maxLength={254} required type="email" value={values.email} onChange={(event) => update("email", event.target.value)} /></label>
+                <label>Charity or nonprofit<input autoComplete="organization" maxLength={200} required value={values.organization_name} onChange={(event) => update("organization_name", event.target.value)} /></label>
+                <label>Website <small>optional</small><input autoComplete="url" maxLength={500} type="url" placeholder="https://" value={values.website} onChange={(event) => update("website", event.target.value)} /></label>
+                <label>Country or region <small>optional</small><input autoComplete="country-name" maxLength={120} value={values.country_or_region} onChange={(event) => update("country_or_region", event.target.value)} /></label>
+                <label>Team size<select required value={values.team_size} onChange={(event) => update("team_size", event.target.value)}><option value="" disabled>Select team size</option><option value="1">1 person</option><option value="2-5">2–5 people</option><option value="6-20">6–20 people</option><option value="21-50">21–50 people</option><option value="51+">51+ people</option></select></label>
+                <label className="wide-field">What would help most?<select required value={values.primary_need} onChange={(event) => update("primary_need", event.target.value)}><option value="" disabled>Select a priority</option><option value="operations">Operations in one place</option><option value="volunteers">Volunteer coordination</option><option value="grants">Grants and evidence</option><option value="communications">Safer communications</option><option value="impact">Impact and reporting</option><option value="accessibility">Accessibility and translation</option><option value="other">Something else</option></select></label>
+              </div>
+              <fieldset className="plan-choice"><legend>Which path fits best?</legend><label><input checked={values.plan_interest === "founding_partner"} name="plan" onChange={() => update("plan_interest", "founding_partner")} type="radio" value="founding_partner" /><span><strong>Founding Partner</strong><small>Managed launch and support · CAD $149/month</small></span></label><label><input checked={values.plan_interest === "community"} name="plan" onChange={() => update("plan_interest", "community")} type="radio" value="community" /><span><strong>Community</strong><small>Free software · your team hosts it</small></span></label><label><input checked={values.plan_interest === "network"} name="plan" onChange={() => update("plan_interest", "network")} type="radio" value="network" /><span><strong>Partner Network</strong><small>Multiple charities · tailored rollout</small></span></label></fieldset>
+              <label className="notes-field">Anything we should know? <small>optional</small><textarea maxLength={2000} placeholder="The challenge, timing, or outcome you care about…" value={values.notes} onChange={(event) => update("notes", event.target.value)} /></label>
+              <div className="honeypot" aria-hidden="true"><label>Company website<input autoComplete="off" tabIndex={-1} value={values.company_website} onChange={(event) => update("company_website", event.target.value)} /></label></div>
+              <label className="consent-field"><input checked={values.consent_to_contact} required type="checkbox" onChange={(event) => update("consent_to_contact", event.target.checked)} /><span>I agree that Project Hope may email me about this application. I can withdraw at any time.</span></label>
+              <p className="privacy-note">We use these details only to assess and run the pilot. No card is requested. Read the <a href="https://github.com/Fink692/project-hope/blob/main/docs/privacy/pilot-applications.md" target="_blank" rel="noreferrer">pilot privacy notice</a>.</p>
+              {error && <p className="form-error" role="alert">{error}</p>}
+              <button aria-busy={busy} className="button primary pilot-submit" disabled={busy} type="submit">{busy ? "Sending application…" : "Apply for a Founding 10 place"}</button>
+            </form>
+          )}
+        </div>
+      </div>
+    </section>
   );
 }
 

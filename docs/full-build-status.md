@@ -1,12 +1,13 @@
 # Project Hope full-build status
 
-Date: 2026-07-31
+Date: 2026-08-23
 
 The complete roadmap is implemented as a release-hardened, self-hosted product baseline in the repository. Domain records are organization-scoped, the web/mobile clients use the same API boundary, and consequential actions remain reviewable or deterministic.
 
 | Roadmap area | Implementation | Verification |
 |---|---|---|
 | Identity, organizations, RBAC, tenant isolation | Django identity app and scoped APIs | Authorization matrix tests |
+| Founding 10 acquisition | Consent-based application, campaign attribution, signed email verification, duplicate protection, admin stages, aggregate metrics, and automated retention | Backend API/command tests and web interaction/build checks |
 | Audit and privacy foundation | Append-only events, retention policies, export command | Audit and command checks |
 | CRM | Contacts, households, relationships, interactions, consent | Tenant/API tests |
 | Volunteers | Applications, pipeline review, profiles, skills, availability | Acceptance/review test |
@@ -36,14 +37,15 @@ The software paths are implemented without paid dependencies. The default Compos
 
 ## Verification run
 
-- Local Django suite: 24 tests passed.
+- Local Django suite: 34 tests passed.
 - AI gateway unit suite: 7 tests passed.
-- Containerized Django suite against PostgreSQL/pgvector: 24 tests passed.
+- Containerized Django suite against PostgreSQL/pgvector: 34 tests passed.
 - Ruff lint/format: passed.
 - Mypy: passed.
 - Migration drift check: passed.
 - Web Vitest: passed.
 - Web TypeScript/Vite build: passed.
+- Public WCAG A/AA Chrome scan: zero automated violations after contrast remediation; keyboard, labels, heading order, focus visibility, and 320px reflow checked. See [1.5 accessibility audit](accessibility-audit-v1.5.md).
 - Mobile TypeScript check: passed.
 - Docker Compose build: passed.
 - Docker Compose startup: passed; reverse-proxy health and AI gateway health confirmed.

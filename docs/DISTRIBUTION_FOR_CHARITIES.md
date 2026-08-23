@@ -15,7 +15,7 @@ Staff do not install Docker, configure databases, manage backups, or learn devel
 
 ### Desktop
 
-The setup partner sends a Project Hope installer for Windows, macOS, or Linux. Install it like any normal application; it creates the desktop/Start menu entry, opens the hosted workspace, and updates through signed releases. A browser-installable version is also available: open the address in Chrome or Edge, choose the install icon or browser menu, then choose **Install Project Hope**.
+The setup partner sends a Project Hope installer for Windows, macOS, or Linux. Install it like any normal application; it creates the desktop/Start menu entry, opens the hosted workspace, and can update through the operator's signed release channel. Public community artifacts may be unsigned; a production operator must apply its own Windows certificate and Apple signing/notarization credentials before handing installers to staff. A browser-installable version is also available: open the address in Chrome or Edge, choose the install icon or browser menu, then choose **Install Project Hope**.
 
 On Safari, choose **File → Add to Dock** on supported macOS versions.
 

@@ -98,6 +98,7 @@ services:
       SMTP_PORT: "1025"
       SMTP_STARTTLS: "false"
       SMTP_FROM: Project Hope <noreply@project-hope.local>
+      PROJECT_HOPE_PUBLIC_URL: http://localhost:8090
       AI_GATEWAY_URL: http://ai-gateway:9000
       AI_GATEWAY_TOKEN: ${AI_GATEWAY_TOKEN:-}
       AI_GATEWAY_TIMEOUT_SECONDS: "3"

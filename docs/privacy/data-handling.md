@@ -1,10 +1,12 @@
 # Data handling and privacy baseline
 
-Project Hope should hold only data tied to a defined programme purpose. Optional fields must be visibly optional. Sensitive fields and documents will eventually be labelled `public`, `internal`, `confidential`, `highly_sensitive`, or `restricted` and those labels will drive retrieval and UI policy.
+Project Hope should hold only data tied to a defined programme purpose. Optional fields are visibly optional. Organization boundaries, role checks, consent records, legal holds, and append-only security events apply across the implemented operational modules.
 
-Phase 1 stores identity, organization, membership, and audit data. It does not ingest mailboxes, documents, contacts, donations, volunteer applications, recordings, or model-training data.
+The platform can store identity and membership data, contacts, volunteers, schedules, documents and extracted passages, minimized mailbox records and approved drafts, grants, resources, translations, analytics, voice-workflow metadata, donor snapshots, plugin/API configuration, and reviewable AI workflow records. Deployments must enable only the modules they can govern, publish their own purposes and retention periods, and avoid importing real data until the corresponding access, backup, export, and incident procedures pass staging verification.
 
-## Rules for future modules
+The public Founding 10 form is a separate acquisition purpose. Its fields, confirmation boundary, access controls, and automated retention are documented in [the pilot application privacy notice](pilot-applications.md).
+
+## Data-handling rules
 
 - Keep source identifiers and approved summaries rather than indefinite copies of whole mailboxes.
 - Disable voice recording by default; transcripts need explicit retention periods and consent.
@@ -13,4 +15,3 @@ Phase 1 stores identity, organization, membership, and audit data. It does not i
 - Privacy requests must cover relational data, files, vectors, search indexes, derived outputs, backups, and model-run metadata.
 - Retention expiry must create an auditable deletion job, with legal holds represented explicitly.
 - Never log raw passwords, bearer tokens, complete prompts containing personal information, unrestricted email bodies, or document text.
-

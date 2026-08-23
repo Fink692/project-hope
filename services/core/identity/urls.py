@@ -10,6 +10,9 @@ from .views import (
     MembershipListView,
     OrganizationDetailView,
     OrganizationListCreateView,
+    PilotApplicationView,
+    PilotMetricsView,
+    PilotVerificationView,
 )
 
 
@@ -18,6 +21,21 @@ urlpatterns = [
     path("auth/login/", LoginView.as_view(), name="auth-login"),
     path("auth/logout/", LogoutView.as_view(), name="auth-logout"),
     path("me/", MeView.as_view(), name="me"),
+    path(
+        "pilot-applications/",
+        PilotApplicationView.as_view(),
+        name="pilot-application",
+    ),
+    path(
+        "pilot-applications/verify/",
+        PilotVerificationView.as_view(),
+        name="pilot-verification",
+    ),
+    path(
+        "pilot-applications/metrics/",
+        PilotMetricsView.as_view(),
+        name="pilot-metrics",
+    ),
     path(
         "organizations/",
         OrganizationListCreateView.as_view(),

@@ -38,9 +38,27 @@ jobs:
           cache: pnpm
           cache-dependency-path: apps/desktop/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
+      - run: pnpm audit --prod
       - run: pnpm run build
-      - name: Build installer
-        run: pnpm exec electron-builder --${{ matrix.target }} --publish never
+      - name: Build Windows installer
+        if: matrix.target == 'win'
+        run: pnpm exec electron-builder --win --publish never
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+      - name: Build, sign, and notarize macOS installer when credentials are configured
+        if: matrix.target == 'mac'
+        run: pnpm exec electron-builder --mac --publish never
+        env:
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      - name: Build Linux installers
+        if: matrix.target == 'linux'
+        run: pnpm exec electron-builder --linux --publish never
       - uses: actions/upload-artifact@v4
         with:
           name: project-hope-desktop-${{ matrix.target }}
@@ -56,6 +74,9 @@ jobs:
         with:
           path: release
           merge-multiple: true
+      - name: Create SHA-256 checksums
+        working-directory: release
+        run: sha256sum Project-Hope-* > SHA256SUMS.txt
       - name: Attach installers to the GitHub release
         uses: softprops/action-gh-release@v2
         with:
@@ -63,6 +84,7 @@ jobs:
           files: |
             release/Project-Hope-*
             release/latest*.yml
+            release/SHA256SUMS.txt
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

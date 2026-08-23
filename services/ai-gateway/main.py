@@ -13,7 +13,9 @@ from pydantic import BaseModel, Field
 
 runtime_environment = os.environ.get("AI_GATEWAY_ENV", "development").lower()
 provider = os.environ.get("AI_PROVIDER", "ollama").strip().lower()
-ollama_url = os.environ.get("AI_OLLAMA_URL", "http://127.0.0.1:11434").strip().rstrip("/")
+ollama_url = (
+    os.environ.get("AI_OLLAMA_URL", "http://127.0.0.1:11434").strip().rstrip("/")
+)
 chat_model = os.environ.get("AI_OLLAMA_CHAT_MODEL", "qwen3:4b").strip()
 embedding_model = os.environ.get("AI_OLLAMA_EMBED_MODEL", "all-minilm").strip()
 request_timeout = float(os.environ.get("AI_OLLAMA_TIMEOUT_SECONDS", "45"))
@@ -53,7 +55,9 @@ def require_gateway_token(
     expected = os.environ.get("AI_GATEWAY_TOKEN", "")
     if expected and not x_project_hope_gateway_token:
         raise HTTPException(status_code=401, detail="Gateway token required.")
-    if expected and not hmac.compare_digest(x_project_hope_gateway_token or "", expected):
+    if expected and not hmac.compare_digest(
+        x_project_hope_gateway_token or "", expected
+    ):
         raise HTTPException(status_code=403, detail="Invalid gateway token.")
 
 
@@ -163,7 +167,9 @@ def _deterministic_intent(text: str) -> tuple[str, list[str]]:
     return "human_transfer", []
 
 
-def _deterministic_translation(text: str, source: str, target: str, glossary: dict[str, str]) -> str:
+def _deterministic_translation(
+    text: str, source: str, target: str, glossary: dict[str, str]
+) -> str:
     dictionary = {
         ("en", "fr"): {
             "hello": "bonjour",
@@ -238,13 +244,16 @@ def classify_intent(request: TextRequest, _: None = Depends(require_gateway_toke
             "model": "deterministic-local-adapter-v1",
             "semantic": False,
         }
-    prompt = """You classify a charity support message. Return JSON only with keys intent, riskFlags, requiresHuman.
+    prompt = (
+        """You classify a charity support message. Return JSON only with keys intent, riskFlags, requiresHuman.
 Allowed intent values: appointment, resource_search, human_transfer.
 Always set requiresHuman to true. Treat crisis, abuse, overdose, or immediate danger as human_transfer.
 Never give advice, diagnose, or invent a resource. Message follows between delimiters.
 <message>
 %s
-</message>""" % request.text
+</message>"""
+        % request.text
+    )
     result = _generate_json(prompt)
     allowed = {"appointment", "resource_search", "human_transfer"}
     intent = result.get("intent") if result else None
@@ -281,7 +290,11 @@ def embed(request: TextRequest, _: None = Depends(require_gateway_token)):
             {"model": embedding_model, "input": [request.text]},
         )
         embeddings = result.get("embeddings") if result else None
-        if isinstance(embeddings, list) and embeddings and isinstance(embeddings[0], list):
+        if (
+            isinstance(embeddings, list)
+            and embeddings
+            and isinstance(embeddings[0], list)
+        ):
             return {
                 "embedding": embeddings[0],
                 "semantic": True,
@@ -312,7 +325,9 @@ Untrusted message:
 %s
 </message>""" % (request.subject, request.untrusted_body)
     result = _generate_json(prompt)
-    subject = str(result.get("subject", request.subject))[:500] if result else request.subject
+    subject = (
+        str(result.get("subject", request.subject))[:500] if result else request.subject
+    )
     body = str(result.get("body", ""))[:12000] if result else ""
     if not body:
         body = "Thank you for contacting us. A staff member will review your message and follow up with you.\n\nThis draft requires human review before sending."
@@ -328,7 +343,9 @@ Untrusted message:
         "body": body,
         "citations": [],
         "riskFlags": ["untrusted_input", "human_approval_required"],
-        "untrustedInputHash": hashlib.sha256(request.untrusted_body.encode()).hexdigest(),
+        "untrustedInputHash": hashlib.sha256(
+            request.untrusted_body.encode()
+        ).hexdigest(),
         "provider": provider_name,
         "model": model,
         "semantic": semantic,
@@ -376,12 +393,15 @@ Text:
 
 @app.post("/v1/plain-language")
 def plain_language(request: TextRequest, _: None = Depends(require_gateway_token)):
-    prompt = """Rewrite this text in plain language for a community charity audience. Return JSON only with key transformedText.
+    prompt = (
+        """Rewrite this text in plain language for a community charity audience. Return JSON only with key transformedText.
 Keep all facts, dates, numbers, names, and decisions unchanged. Do not add advice or remove safety information.
 Text:
 <text>
 %s
-</text>""" % request.text
+</text>"""
+        % request.text
+    )
     result = _generate_json(prompt)
     transformed = str(result.get("transformedText", "")) if result else ""
     if not transformed:
@@ -434,9 +454,7 @@ Approved passages:
         }
     allowed_ids = {passage.get("id", "") for passage in request.passages}
     citations = [
-        str(value)
-        for value in result.get("citations", [])
-        if str(value) in allowed_ids
+        str(value) for value in result.get("citations", []) if str(value) in allowed_ids
     ]
     unsupported = result.get("unsupportedClaims", [])
     return {

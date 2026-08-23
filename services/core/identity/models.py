@@ -99,3 +99,84 @@ class Membership(models.Model):
 
     def __str__(self):
         return f"{self.user.email} @ {self.organization.slug} ({self.role})"
+
+
+class PilotApplication(models.Model):
+    """A privacy-minimized request to join the Founding 10 programme."""
+
+    PRIVACY_VERSION = "2026-08-23"
+
+    class Status(models.TextChoices):
+        NEW = "new", "New"
+        CONTACTED = "contacted", "Contacted"
+        QUALIFIED = "qualified", "Qualified"
+        PILOT = "pilot", "Pilot active"
+        CONVERTED = "converted", "Converted"
+        DECLINED = "declined", "Declined"
+
+    class TeamSize(models.TextChoices):
+        ONE = "1", "1 person"
+        TWO_TO_FIVE = "2-5", "2–5 people"
+        SIX_TO_TWENTY = "6-20", "6–20 people"
+        TWENTY_ONE_TO_FIFTY = "21-50", "21–50 people"
+        FIFTY_ONE_PLUS = "51+", "51+ people"
+
+    class PrimaryNeed(models.TextChoices):
+        OPERATIONS = "operations", "Operations in one place"
+        VOLUNTEERS = "volunteers", "Volunteer coordination"
+        GRANTS = "grants", "Grants and evidence"
+        COMMUNICATIONS = "communications", "Safer communications"
+        IMPACT = "impact", "Impact and reporting"
+        ACCESSIBILITY = "accessibility", "Accessibility and translation"
+        OTHER = "other", "Something else"
+
+    class PlanInterest(models.TextChoices):
+        COMMUNITY = "community", "Community — self-hosted"
+        FOUNDING_PARTNER = "founding_partner", "Founding Partner — managed support"
+        NETWORK = "network", "Partner Network — multiple charities"
+
+    class Source(models.TextChoices):
+        WEBSITE = "website", "Website"
+        LINKEDIN = "linkedin", "LinkedIn"
+        PARTNER = "partner", "Partner"
+        REFERRAL = "referral", "Referral"
+        DIRECT = "direct", "Direct"
+        OTHER = "other", "Other"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    contact_name = models.CharField(max_length=160)
+    email = models.EmailField(unique=True)
+    organization_name = models.CharField(max_length=200)
+    website = models.URLField(max_length=500, blank=True)
+    country_or_region = models.CharField(max_length=120, blank=True)
+    team_size = models.CharField(max_length=12, choices=TeamSize.choices)
+    primary_need = models.CharField(max_length=32, choices=PrimaryNeed.choices)
+    plan_interest = models.CharField(max_length=32, choices=PlanInterest.choices)
+    notes = models.TextField(blank=True)
+    consent_to_contact = models.BooleanField(default=False)
+    privacy_version = models.CharField(max_length=20, default=PRIVACY_VERSION)
+    source = models.CharField(
+        max_length=24, choices=Source.choices, default=Source.WEBSITE
+    )
+    utm_source = models.CharField(max_length=120, blank=True)
+    utm_medium = models.CharField(max_length=120, blank=True)
+    utm_campaign = models.CharField(max_length=160, blank=True)
+    referrer = models.URLField(max_length=500, blank=True)
+    status = models.CharField(max_length=24, choices=Status.choices, default=Status.NEW)
+    verified_at = models.DateTimeField(null=True, blank=True)
+    verification_email_sent_at = models.DateTimeField(null=True, blank=True)
+    verification_email_last_attempt_at = models.DateTimeField(null=True, blank=True)
+    verification_email_attempts = models.PositiveIntegerField(default=0)
+    submission_count = models.PositiveIntegerField(default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def save(self, *args, **kwargs):
+        self.email = self.email.strip().lower()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.organization_name} ({self.email})"

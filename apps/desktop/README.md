@@ -19,3 +19,5 @@ Build targets:
 - Linux: AppImage and Debian package (`.AppImage`, `.deb`)
 
 The production installer should be built with the charity’s HTTPS address, organization-owned signing certificates, and a synthetic-data staging test before it is handed to staff.
+
+The GitHub installer workflow is ready to consume signing credentials without committing them. Configure `WIN_CSC_LINK` and `WIN_CSC_KEY_PASSWORD` for Windows. For macOS, configure `MAC_CSC_LINK`, `MAC_CSC_KEY_PASSWORD`, `APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`, and `APPLE_TEAM_ID`. If those secrets are absent, community artifacts still build but operating systems may show an unknown-publisher warning or require a Gatekeeper override.

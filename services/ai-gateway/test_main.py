@@ -7,10 +7,13 @@ import main
 
 class GatewayTests(unittest.TestCase):
     def test_health_reports_configured_ollama_models(self):
-        with patch.object(main, "provider", "ollama"), patch.object(
-            main,
-            "_installed_models",
-            return_value=["qwen3:4b", "all-minilm:latest"],
+        with (
+            patch.object(main, "provider", "ollama"),
+            patch.object(
+                main,
+                "_installed_models",
+                return_value=["qwen3:4b", "all-minilm:latest"],
+            ),
         ):
             payload = main.healthz()
         self.assertEqual(payload["status"], "ok")
@@ -33,7 +36,9 @@ class GatewayTests(unittest.TestCase):
     def test_crisis_terms_bypass_model_and_force_human_transfer(self):
         with patch.object(main, "_generate_json") as generate:
             payload = main.classify_intent(
-                main.TextRequest(text="This is an emergency and I am in immediate danger."),
+                main.TextRequest(
+                    text="This is an emergency and I am in immediate danger."
+                ),
                 None,
             )
         generate.assert_not_called()

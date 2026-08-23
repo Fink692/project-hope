@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Project Hope API
-  version: 1.4.0
+  version: 1.5.0
   description: Tenant-bound API for self-hosted charity operations.
 servers:
   - url: /api/v1
@@ -26,6 +26,42 @@ paths:
       summary: Sign in and receive a browser session plus native API token
       responses:
         '200': { description: Authenticated user and token }
+  /pilot-applications/:
+    post:
+      security: []
+      summary: Apply to the Founding 10 pilot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PilotApplicationRequest' }
+      responses:
+        '202': { description: Application accepted with a generic privacy-preserving response }
+        '400': { description: Invalid input or missing consent }
+        '429': { description: Submission rate limit reached }
+  /pilot-applications/verify/:
+    post:
+      security: []
+      summary: Confirm a pilot application email using an expiring signed token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string, maxLength: 2048 }
+      responses:
+        '200': { description: Email confirmed }
+        '400': { description: Token invalid or expired }
+        '429': { description: Verification rate limit reached }
+  /pilot-applications/metrics/:
+    get:
+      summary: Privacy-safe Founding 10 conversion counts for administrators
+      responses:
+        '200': { description: Aggregate application, verification, qualification, pilot, and conversion counts }
+        '403': { description: Administrator access required }
   /organizations/{slug}/contacts/:
     parameters: [{ $ref: '#/components/parameters/OrganizationSlug' }]
     get: { summary: List tenant contacts, responses: { '200': { description: Contacts } } }
@@ -53,3 +89,25 @@ components:
   parameters:
     OrganizationSlug: { name: slug, in: path, required: true, schema: { type: string } }
     Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+  schemas:
+    PilotApplicationRequest:
+      type: object
+      additionalProperties: false
+      required: [contact_name, email, organization_name, team_size, primary_need, plan_interest, consent_to_contact]
+      properties:
+        contact_name: { type: string, maxLength: 160 }
+        email: { type: string, format: email, maxLength: 254 }
+        organization_name: { type: string, maxLength: 200 }
+        website: { type: string, format: uri, maxLength: 500 }
+        country_or_region: { type: string, maxLength: 120 }
+        team_size: { type: string, enum: ['1', '2-5', '6-20', '21-50', '51+'] }
+        primary_need: { type: string, enum: [operations, volunteers, grants, communications, impact, accessibility, other] }
+        plan_interest: { type: string, enum: [community, founding_partner, network] }
+        notes: { type: string, maxLength: 2000 }
+        consent_to_contact: { type: boolean, const: true }
+        source: { type: string, enum: [website, linkedin, partner, referral, direct, other] }
+        utm_source: { type: string, maxLength: 120 }
+        utm_medium: { type: string, maxLength: 120 }
+        utm_campaign: { type: string, maxLength: 160 }
+        referrer: { type: string, format: uri, maxLength: 500 }
+        company_website: { type: string, maxLength: 500, description: Bot-detection honeypot; real clients leave this empty. }

@@ -1,19 +1,30 @@
+from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
+from django.core import signing
 from django.db import transaction
+from django.db.models import F
 from django.http import Http404
 from django.middleware.csrf import get_token
+from django.utils import timezone
 from django.utils.text import slugify
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.utils.decorators import method_decorator
 from rest_framework import status
+from rest_framework.authentication import BaseAuthentication
 from rest_framework.authtoken.models import Token
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from audit.models import AuditEvent
 
-from .models import Membership, Organization, User
+from .models import Membership, Organization, PilotApplication, User
+from .pilot import (
+    PILOT_VERIFICATION_SALT,
+    send_pilot_verification,
+    verification_email_due,
+)
 from .permissions import active_membership, require_admin, require_membership
 from .serializers import (
     AddMembershipSerializer,
@@ -21,6 +32,8 @@ from .serializers import (
     LoginSerializer,
     MembershipSerializer,
     OrganizationSerializer,
+    PilotApplicationSerializer,
+    PilotVerificationSerializer,
     UpdateMembershipSerializer,
     UserSummarySerializer,
 )
@@ -49,6 +62,135 @@ class CsrfView(APIView):
 
     def get(self, request):
         return Response({"csrfTokenAvailable": bool(get_token(request))})
+
+
+class PilotApplicationView(APIView):
+    authentication_classes: list[type[BaseAuthentication]] = []
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "pilot_application"
+
+    def post(self, request):
+        serializer = PilotApplicationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = dict(serializer.validated_data)
+
+        # Real visitors never see or use this field. Treat a filled honeypot exactly
+        # like a successful submission so bots cannot tune around it.
+        if data.pop("company_website", ""):
+            return Response(
+                {
+                    "detail": (
+                        "Application received. Check your email to confirm your request."
+                    )
+                },
+                status=status.HTTP_202_ACCEPTED,
+            )
+
+        email = data.pop("email")
+        data["privacy_version"] = PilotApplication.PRIVACY_VERSION
+        application, created = PilotApplication.objects.get_or_create(
+            email=email,
+            defaults=data,
+        )
+        if not created:
+            PilotApplication.objects.filter(id=application.id).update(
+                submission_count=F("submission_count") + 1,
+                updated_at=timezone.now(),
+            )
+            application.refresh_from_db(fields=["submission_count", "updated_at"])
+
+        if verification_email_due(application):
+            send_pilot_verification(application)
+
+        return Response(
+            {
+                "detail": (
+                    "Application received. Check your email to confirm your request."
+                )
+            },
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+
+class PilotVerificationView(APIView):
+    authentication_classes: list[type[BaseAuthentication]] = []
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "pilot_verification"
+
+    def post(self, request):
+        serializer = PilotVerificationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            payload = signing.loads(
+                serializer.validated_data["token"],
+                salt=PILOT_VERIFICATION_SALT,
+                max_age=settings.PROJECT_HOPE_PILOT_VERIFICATION_MAX_AGE_SECONDS,
+            )
+            application = PilotApplication.objects.get(
+                id=payload["id"], email=payload["email"]
+            )
+        except (
+            KeyError,
+            PilotApplication.DoesNotExist,
+            signing.BadSignature,
+            signing.SignatureExpired,
+            TypeError,
+            ValueError,
+        ):
+            return Response(
+                {"detail": "This confirmation link is invalid or has expired."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if application.verified_at is None:
+            application.verified_at = timezone.now()
+            application.save(update_fields=["verified_at", "updated_at"])
+
+        return Response(
+            {
+                "detail": (
+                    "Your email is confirmed. We will review your application and "
+                    "contact you personally."
+                ),
+                "verified": True,
+            }
+        )
+
+
+class PilotMetricsView(APIView):
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        applications = PilotApplication.objects.all()
+        verified = applications.filter(verified_at__isnull=False)
+        status_counts = {
+            choice: verified.filter(status=choice).count()
+            for choice in PilotApplication.Status.values
+        }
+        verified_count = verified.count()
+        return Response(
+            {
+                "target": 10,
+                "applications": applications.count(),
+                "verified": verified_count,
+                "remaining": max(0, 10 - verified_count),
+                "qualified": verified.filter(
+                    status__in=[
+                        PilotApplication.Status.QUALIFIED,
+                        PilotApplication.Status.PILOT,
+                        PilotApplication.Status.CONVERTED,
+                    ]
+                ).count(),
+                "activePilots": status_counts[PilotApplication.Status.PILOT],
+                "converted": status_counts[PilotApplication.Status.CONVERTED],
+                "awaitingEmailDelivery": applications.filter(
+                    verified_at__isnull=True, verification_email_sent_at__isnull=True
+                ).count(),
+                "byStatus": status_counts,
+            }
+        )
 
 
 class LoginView(APIView):

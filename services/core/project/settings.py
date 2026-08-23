@@ -136,6 +136,8 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "anon": os.environ.get("DRF_ANON_RATE", "60/minute"),
         "user": os.environ.get("DRF_USER_RATE", "600/minute"),
+        "pilot_application": os.environ.get("DRF_PILOT_APPLICATION_RATE", "10/hour"),
+        "pilot_verification": os.environ.get("DRF_PILOT_VERIFICATION_RATE", "30/hour"),
     },
 }
 
@@ -185,7 +187,52 @@ EMAIL_BACKEND = os.environ.get(
 EMAIL_HOST = os.environ.get("SMTP_HOST", "localhost")
 EMAIL_PORT = int(os.environ.get("SMTP_PORT", "25"))
 EMAIL_USE_TLS = env_bool("SMTP_STARTTLS", False)
+EMAIL_USE_SSL = env_bool("SMTP_USE_SSL", False)
+EMAIL_HOST_USER = os.environ.get("SMTP_USERNAME", "")
+EMAIL_HOST_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+EMAIL_TIMEOUT = int(os.environ.get("SMTP_TIMEOUT_SECONDS", "10"))
 DEFAULT_FROM_EMAIL = os.environ.get("SMTP_FROM", "Project Hope <noreply@example.org>")
+PROJECT_HOPE_PUBLIC_URL = os.environ.get("PROJECT_HOPE_PUBLIC_URL", "").rstrip("/")
+if not PROJECT_HOPE_PUBLIC_URL and ENVIRONMENT != "production":
+    PROJECT_HOPE_PUBLIC_URL = "http://localhost:5173"
+if EMAIL_USE_TLS and EMAIL_USE_SSL:
+    raise ImproperlyConfigured("Enable only one of SMTP_STARTTLS or SMTP_USE_SSL.")
+if ENVIRONMENT == "production":
+    public_url = urlparse(PROJECT_HOPE_PUBLIC_URL)
+    if (
+        public_url.scheme != "https"
+        or not public_url.netloc
+        or public_url.username
+        or public_url.password
+        or public_url.query
+        or public_url.fragment
+    ):
+        raise ImproperlyConfigured(
+            "PROJECT_HOPE_PUBLIC_URL must be a credential-free HTTPS origin or path "
+            "without a query or fragment in production."
+        )
+    if not os.environ.get("SMTP_HOST") or not os.environ.get("SMTP_FROM"):
+        raise ImproperlyConfigured(
+            "SMTP_HOST and SMTP_FROM are required in production."
+        )
+PROJECT_HOPE_PILOT_VERIFICATION_MAX_AGE_SECONDS = int(
+    os.environ.get("PROJECT_HOPE_PILOT_VERIFICATION_MAX_AGE_SECONDS", "604800")
+)
+PROJECT_HOPE_PILOT_EMAIL_RETRY_SECONDS = int(
+    os.environ.get("PROJECT_HOPE_PILOT_EMAIL_RETRY_SECONDS", "900")
+)
+PROJECT_HOPE_PILOT_EMAIL_RETRY_BATCH_SIZE = int(
+    os.environ.get("PROJECT_HOPE_PILOT_EMAIL_RETRY_BATCH_SIZE", "20")
+)
+PROJECT_HOPE_PILOT_UNVERIFIED_RETENTION_DAYS = int(
+    os.environ.get("PROJECT_HOPE_PILOT_UNVERIFIED_RETENTION_DAYS", "14")
+)
+PROJECT_HOPE_PILOT_DECLINED_RETENTION_DAYS = int(
+    os.environ.get("PROJECT_HOPE_PILOT_DECLINED_RETENTION_DAYS", "90")
+)
+PROJECT_HOPE_PILOT_INACTIVE_RETENTION_DAYS = int(
+    os.environ.get("PROJECT_HOPE_PILOT_INACTIVE_RETENTION_DAYS", "365")
+)
 
 valkey_url = os.environ.get("VALKEY_URL", "")
 if valkey_url:

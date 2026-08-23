@@ -10,11 +10,25 @@ Project Hope gives charities one connected place to coordinate people, programs,
 
 It works like a normal app: staff install it, sign in, and get to work. The desktop, iPhone, and Android clients all use the same hosted organization workspace, so nobody has to keep separate copies of the truth.
 
+![Project Hope Founding 10 application and managed pilot offer](docs/assets/founding-10.png)
+
+## Founding 10 managed pilot
+
+Project Hope's self-hosted Community edition remains free. The Founding 10 programme is for charities that want someone else to handle the technical launch and ongoing maintenance.
+
+- **Founding Partner pilot:** CAD $149/month after the workspace is live
+- **Included:** managed launch, first-admin onboarding, updates, encrypted backups, and human support
+- **Pilot terms:** no setup fee, no charge to apply, no card collected during application, and cancel anytime
+- **Data terms:** fit, scope, hosting region, and responsibilities are confirmed in writing before launch
+
+The built-in application requires explicit consent, verifies every email, prevents duplicate applicants, and records privacy-safe funnel evidence. See the [commercial readiness runbook](docs/commercial-readiness.md) and [pilot privacy notice](docs/privacy/pilot-applications.md).
+
 ## Start here
 
 | You are here for… | Go to… |
 |---|---|
 | Installing the app | [Download the latest desktop installers](https://github.com/Fink692/project-hope/releases/latest) |
+| Running the Founding 10 programme | [Commercial readiness and launch runbook](docs/commercial-readiness.md) |
 | Understanding the charity experience | [Project Hope as an app](docs/DISTRIBUTION_FOR_CHARITIES.md) |
 | Deploying a workspace for a charity | [Production deployment guide](docs/operations/production-deployment.md) |
 | Running a local training workspace | [Getting Started for Charities](docs/GETTING_STARTED_FOR_CHARITIES.md) |
@@ -157,7 +171,7 @@ GitHub Actions also verifies the backend, web client, mobile client, desktop pac
 
 ## Release status
 
-The current public release is [Project Hope 1.4.0](https://github.com/Fink692/project-hope/releases/tag/v1.4.0), with native desktop installers and the local AI runtime configuration attached. The [full build status](docs/full-build-status.md) records the implemented product surface and the remaining organization-owned launch requirements.
+The current public release is [Project Hope 1.5.0](https://github.com/Fink692/project-hope/releases/tag/v1.5.0), with native desktop installers, the local AI runtime, and the Founding 10 acquisition workflow. The [full build status](docs/full-build-status.md) records the implemented product surface and the remaining organization-owned launch requirements.
 
 ## Principles
 
