@@ -1,12 +1,12 @@
 # Commercial readiness and Founding 10 runbook
 
-Project Hope keeps its self-hosted software free. The paid product is a managed service that removes setup and maintenance work for charities.
+Project Hope's source is publicly visible, but no software license has yet been approved. Reuse rights must not be assumed. The intended Community path is self-hosted and zero-cost after the copyright owner approves its licensing terms; the paid product is a managed service that removes setup and maintenance work for charities.
 
 ## The offer
 
 | Path | Price | Included |
 |---|---:|---|
-| Community | CAD $0 software | Self-hosted source, documentation, and release installers |
+| Community preview | Licensing pending | Publicly visible self-hosted source, documentation, and release installers; no reuse grant yet |
 | Founding Partner | CAD $149/month during the pilot | Managed workspace launch, first-admin onboarding, updates, encrypted backups, and human support; no pilot setup fee |
 | Partner Network | Scoped proposal | Rollout and governance for multiple charities |
 

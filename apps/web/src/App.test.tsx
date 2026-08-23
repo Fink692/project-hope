@@ -30,6 +30,8 @@ describe("Project Hope web shell", () => {
     expect(screen.getByRole("heading", { name: "Be one of the Founding 10." })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "You should not need to be technical to get started." })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Install Project Hope like an app." })).toBeInTheDocument();
+    expect(screen.getByText("Community preview")).toBeInTheDocument();
+    expect(screen.getByText("Self-hosted source · licensing terms pending")).toBeInTheDocument();
     expect(screen.getByRole("main")).toHaveAttribute("id", "main-content");
     expect(await screen.findByRole("status")).toHaveTextContent("Ready for work");
   });

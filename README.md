@@ -4,7 +4,7 @@
 
 [![Quality gate](https://github.com/Fink692/project-hope/actions/workflows/ci.yml/badge.svg)](https://github.com/Fink692/project-hope/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/Fink692/project-hope?display_name=tag&color=1f7a5a)](https://github.com/Fink692/project-hope/releases/latest)
-[![License](https://img.shields.io/badge/data-charity--controlled-235347)](docs/full-build-status.md)
+[![Data control](https://img.shields.io/badge/data-charity--controlled-235347)](docs/full-build-status.md)
 
 Project Hope gives charities one connected place to coordinate people, programs, volunteers, documents, schedules, grants, communications, and impact work.
 
