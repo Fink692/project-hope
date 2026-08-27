@@ -1,55 +1,39 @@
-# LinkedIn release post — Project Hope 1.8
+# LinkedIn release post — Project Hope 1.9.0
 
 ## Post
 
-After a long time building, testing, rebuilding, and obsessing over the details, I’m proud to release Project Hope 1.8: Bring your contacts. 🌱
+After a long time building, testing, and reworking the details, I’m proud to release Project Hope 1.9.0. 🌱
 
-For a charity, changing software often begins with a spreadsheet—and a fear that names, history, consent, or important context will be lost along the way.
+Less admin. More human.
 
-I wanted that first step to feel calm.
+I started with a simple idea: people doing good work should not have to become an IT department just to try better software.
 
-With Project Hope 1.8, a charity owner can choose a normal Excel or CSV contact list, preview every row without changing anything, fix errors, review possible matches, and import only what they approve.
+This desktop preview includes a working sample workspace. Download the installer from the new website, open the app, and explore fictional contacts, volunteer applications, schedules, and writing assistance. No account or server address is needed for that first look.
 
-No scripts. No database work. No blind “upload and hope.”
+Your sample edits stay when you close the app and come back.
 
-What’s new:
+There is contact import review, duplicate cleanup, export, and a place to prepare messages for human review. Nothing is automatically sent from the sample.
 
-✅ A polished Excel template with instructions and helpful dropdowns
-✅ A three-step Choose → Review → Finish migration experience
-✅ Plain-language status for every row: ready, matched, possible duplicate, or needs correction
-✅ Safe fill-missing updates that never overwrite trusted contact details
-✅ Reviewed duplicate merging that preserves the source record and linked history
-✅ Portable Excel and CSV exports whenever the charity needs its data
-✅ Viewer accounts that are now consistently read-only across organization records
+I have also rebuilt the website with a new identity, a proper product tour, direct downloads, plain-language installation help, and motion you can pause.
 
-Underneath it are short-lived previews bound to the user, organization, and file; tenant-safe transactions; formula and macro protection; legal-hold controls; minimized audit data; and fail-closed revalidation.
+I want to be clear about what this release is: a desktop preview. Installers are not yet code-signed. Generative AI needs compatible local models; basic templates are labelled honestly when those models are unavailable. A shared workspace for real charity records still needs a separately prepared hosted service.
 
-Project Hope brings charity operations and carefully bounded AI into one connected workspace—without expecting the team to become an IT department.
+I’m proud to put this next step out into the world—and I want real feedback from the people it is meant to help.
 
-This release passed 69 backend tests, 21 web and shared-client journeys with automated accessibility checks, 7 AI-gateway tests, production builds across every client, dependency audits, migration checks, and deployment validation.
+Explore Project Hope and download it here:
+https://project-hope-charities.vercel.app/#download
 
-I’m also opening the Founding 10: ten charities willing to test Project Hope honestly and help shape what comes next. The planned managed Founding Partner pilot is CAD $149/month after a workspace is live. Applying is free, no card is collected, and scope, hosting region, data responsibilities, and terms are agreed in writing before launch.
+If your charity would like to discuss a Founding 10 pilot, send me a private message with “FOUNDING 10” and your charity’s name. Please do not share client, donor, or beneficiary information in the comments.
 
-If you work with a charity—or know someone who does—I would be grateful if you shared this.
-
-To ask about a Founding 10 place, send me a private LinkedIn message with “FOUNDING 10” and your charity’s name. Please do not post client, donor, volunteer, or service-user information in the comments.
-
-Release notes and desktop installers:
-https://github.com/Fink692/project-hope/releases/tag/v1.8.0
-
-After working on this so long, it feels deeply meaningful to put this release into the world. I’m proud of the care, honesty, and persistence behind it—and ready to build the next chapter alongside real charity teams.
-
-#CharityTech #NonprofitTechnology #TechForGood #SocialImpact #ResponsibleAI #SaaS
+#CharityTech #NonprofitTechnology #TechForGood #SocialImpact #ResponsibleAI
 
 ## Suggested first comment
 
-> The spreadsheet is often the first real test of trust. Project Hope 1.8 now lets a charity preview, correct, deduplicate, import, and export its contacts through the app—without learning technical tools. If your organization would test that promise honestly, send me “FOUNDING 10” and your charity’s name. Release: https://github.com/Fink692/project-hope/releases/tag/v1.8.0
+> The new site has direct downloads and a plain-language getting-started guide. The desktop sample opens without an account or workspace address. I’d love to hear where the first-time experience feels clear—and where it still needs work. https://project-hope-charities.vercel.app
 
 ## Publishing notes
 
-- Suggested first image: `docs/assets/crm-import-review-live-v1.8.png`
-- Suggested first-image alt text: “Project Hope’s CRM import review showing a contact spreadsheet summary, ready and invalid row states, and explicit reviewed actions before import.”
-- Optional second image: `docs/assets/crm-duplicates-live-v1.8.png`
-- Suggested second-image alt text: “Project Hope’s duplicate-review screen comparing two synthetic contacts, explaining the match, and requiring an explicit reviewed merge confirmation.”
-- Put the release link in the post, then add the suggested first comment immediately after publishing.
-- Do not claim ten applicants, customers, revenue, live public hosting, signed installers, or external validation until each has separate evidence.
+- Publish only after the website download buttons point to verified installer files.
+- Use a real screenshot of the packaged desktop app with fictional data.
+- Do not claim signed installers, managed accounts, paid customers, or an independent production-security audit.
+- This file is a draft; creating it does not publish anything to LinkedIn.

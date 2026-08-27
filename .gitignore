@@ -20,6 +20,7 @@ dist/
 apps/desktop/dist/
 apps/desktop/release*/
 apps/desktop/.builder-cache/
+apps/desktop/resources/
 coverage/
 artifacts/
 .tmp/

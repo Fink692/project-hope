@@ -42,9 +42,11 @@ def validate_post() -> int:
     version = json.loads(
         (ROOT / "apps" / "web" / "package.json").read_text(encoding="utf-8")
     )["version"]
-    release_url = f"https://github.com/Fink692/project-hope/releases/tag/v{version}"
+    release_url = "https://project-hope-charities.vercel.app/#download"
     if release_url not in post:
-        raise SystemExit(f"LinkedIn post does not point to the v{version} release")
+        raise SystemExit("LinkedIn post must point to the direct website download")
+    if f"Project Hope {version}" not in post:
+        raise SystemExit(f"LinkedIn post does not identify version {version}")
     if "FOUNDING 10" not in post:
         raise SystemExit(
             "LinkedIn post is missing the private Founding 10 call to action"

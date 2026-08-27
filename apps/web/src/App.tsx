@@ -1,8 +1,10 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import CRMPanel from "./CRMPanel";
+import AIWorkbench from "./AIWorkbench";
 
 type Health = {
+  mode?: "showcase" | "connected";
   status: "ok" | "degraded" | "unknown";
   database: "ok" | "unavailable" | "unknown";
   ai?: { status: "ok" | "degraded" | "disabled" | "unavailable" | "unknown"; runtime?: string };
@@ -296,6 +298,7 @@ function App() {
   useEffect(() => {
     request("/api/v1/healthz/")
       .then((body: Partial<Health>) => setHealth({
+        mode: body.mode === "showcase" ? "showcase" : "connected",
         status: body.status === "ok" || body.status === "degraded" ? body.status : "unknown",
         database: body.database === "ok" || body.database === "unavailable" ? body.database : "unknown",
         ai: body.ai && typeof body.ai === "object"
@@ -408,13 +411,14 @@ function App() {
   }
 
   const selectedModule = modules.find((module) => module.id === activeModule);
+  const showcase = health.mode === "showcase";
 
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main-content">Skip to main content</a>
       <header className="site-header">
         <div className="brand-block">
-          <span className="brand-mark" aria-hidden="true">H</span>
+          <img className="brand-mark" src="/hope-mark.png" alt="" />
           <div><p className="eyebrow">Charity operations platform</p><h1>Project Hope</h1></div>
         </div>
         <nav aria-label="Primary navigation">
@@ -427,13 +431,14 @@ function App() {
       </header>
 
       <main id="main-content">
+        {showcase && <div className="showcase-banner" role="note"><div><strong>Sample workspace · saved on this computer</strong><p>Explore with fictional data. Email sending, live calls, and team invitations are disabled.</p></div>{window.projectHopeDesktop && <button className="button secondary compact" onClick={() => void window.projectHopeDesktop?.showSetup()} type="button">Connect my charity</button>}</div>}
         {invitationToken && <InvitationAcceptance token={invitationToken} onAccepted={(result) => void invitationAccepted(result)} onCancel={() => setInvitationToken("")} />}
         {!invitationToken && (requestPasswordReset || passwordReset) && <PasswordResetPanel credentials={passwordReset} initialEmail={loginEmail} onCancel={() => { setPasswordReset(null); setRequestPasswordReset(false); }} onCompleted={passwordResetCompleted} />}
         {!invitationToken && !requestPasswordReset && !passwordReset && mfaChallenge && <MfaChallengePanel challenge={mfaChallenge} onAuthenticated={(usedRecoveryCode) => void mfaAuthenticated(usedRecoveryCode)} onCancel={() => setMfaChallenge(null)} />}
         {!invitationToken && !requestPasswordReset && !passwordReset && !mfaChallenge && <>
         {workspaceNotice && <div className="verification-banner" role="status" aria-live="polite"><strong>Access updated</strong><span>{workspaceNotice}</span><button className="text-button" type="button" onClick={() => setWorkspaceNotice("")}>Dismiss</button></div>}
         {pilotVerification !== "idle" && <div className={`verification-banner ${pilotVerification === "error" ? "error" : ""}`} role={pilotVerification === "error" ? "alert" : "status"} aria-live="polite"><strong>{pilotVerification === "checking" ? "Confirming your email…" : pilotVerification === "confirmed" ? "Email confirmed" : "Confirmation problem"}</strong>{pilotVerificationMessage && <span>{pilotVerificationMessage}</span>}</div>}
-        <section className="hero" id="overview" aria-labelledby="hero-title">
+        <section className={`hero${showcase && session ? " showcase-hero" : ""}`} id="overview" aria-labelledby="hero-title">
           <div>
             <p className="eyebrow">Charity-first · human-led</p>
             <h2 id="hero-title">A calm, capable home for community work.</h2>
@@ -467,12 +472,12 @@ function App() {
             <aside className="onboarding-card" aria-labelledby="onboarding-title">
               <div><p className="eyebrow">New to Project Hope?</p><h3 id="onboarding-title">You should not need to be technical to get started.</h3><p>A coordinator can run one guided setup command, open this page, and invite the team. The plain-language guide explains every step.</p></div>
               <ol className="onboarding-steps"><li><span>01</span><div><strong>Set up once</strong><small>Use the guided helper on the computer that will host the workspace.</small></div></li><li><span>02</span><div><strong>Open the workspace</strong><small>Project Hope checks its services and opens the browser for you.</small></div></li><li><span>03</span><div><strong>Start with one task</strong><small>Choose CRM, Volunteers, or Scheduling. Add more when your team is ready.</small></div></li></ol>
-              <a className="button secondary compact" href="https://github.com/Fink692/project-hope/blob/main/docs/GETTING_STARTED_FOR_CHARITIES.md" target="_blank" rel="noreferrer">Open the plain-language guide</a>
+              <a className="button secondary compact" href="https://project-hope-charities.vercel.app/guide" target="_blank" rel="noreferrer">Open the plain-language guide</a>
             </aside>
           </section>
         )}
 
-        {!session && <section className="section download-section" id="download" aria-labelledby="download-title"><div className="section-heading"><div><p className="eyebrow">One workspace, every device</p><h2 id="download-title">Install Project Hope like an app.</h2></div><p>Your charity gets one hosted workspace. Staff can install it on desktop, use the mobile app, and see the same organization data everywhere.</p></div><div className="download-grid"><article className="download-card featured"><span className="card-number" aria-hidden="true">01</span><h3>Desktop installer</h3><p>Download the Windows, macOS, or Linux installer prepared for your workspace. It opens like a normal app and updates with releases.</p><div className="card-actions"><a className="button primary compact" href="https://github.com/Fink692/project-hope/releases/latest" target="_blank" rel="noreferrer">Download installer</a>{installPrompt ? <button className="button secondary compact" type="button" onClick={() => void installApp()}>Install from browser</button> : <small>ChromeOS and browser users can choose “Install Project Hope” from the browser menu.</small>}</div></article><article className="download-card"><span className="card-number" aria-hidden="true">02</span><h3>iPhone and Android</h3><p>The Expo mobile client uses the same secure sign-in and hosted workspace for field work, schedules, volunteers, and tasks.</p><small>App Store builds are prepared by the organization’s setup partner with its own signing accounts.</small></article><article className="download-card"><span className="card-number" aria-hidden="true">03</span><h3>Everything connected</h3><p>No duplicate databases, file transfers, or per-device setup. One organization boundary, one login, one source of truth.</p><a className="button secondary compact" href="https://github.com/Fink692/project-hope/blob/main/docs/DISTRIBUTION_FOR_CHARITIES.md" target="_blank" rel="noreferrer">See how it works</a></article></div></section>}
+        {!session && <section className="section download-section" id="download" aria-labelledby="download-title"><div className="section-heading"><div><p className="eyebrow">One workspace, every device</p><h2 id="download-title">Install Project Hope like an app.</h2></div><p>Your charity gets one hosted workspace. Staff can install it on desktop, use the mobile app, and see the same organization data everywhere.</p></div><div className="download-grid"><article className="download-card featured"><span className="card-number" aria-hidden="true">01</span><h3>Desktop installer</h3><p>Download the Windows, macOS, or Linux installer prepared for your workspace. It opens like a normal app and updates with releases.</p><div className="card-actions"><a className="button primary compact" href="https://project-hope-charities.vercel.app/#download" target="_blank" rel="noreferrer">Download installer</a>{installPrompt ? <button className="button secondary compact" type="button" onClick={() => void installApp()}>Install from browser</button> : <small>ChromeOS and browser users can choose “Install Project Hope” from the browser menu.</small>}</div></article><article className="download-card"><span className="card-number" aria-hidden="true">02</span><h3>iPhone and Android</h3><p>The Expo mobile client uses the same secure sign-in and hosted workspace for field work, schedules, volunteers, and tasks.</p><small>App Store builds are prepared by the organization’s setup partner with its own signing accounts.</small></article><article className="download-card"><span className="card-number" aria-hidden="true">03</span><h3>Everything connected</h3><p>No duplicate databases, file transfers, or per-device setup. One organization boundary, one login, one source of truth.</p><a className="button secondary compact" href="https://project-hope-charities.vercel.app/guide#team" target="_blank" rel="noreferrer">See how it works</a></article></div></section>}
 
         {session && (
           <section className="section workspace" id="workspace" aria-labelledby="workspace-title">
@@ -485,7 +490,7 @@ function App() {
                 {currentOrganization && !session.mfa?.enrollmentRequired && <button aria-current={activeModule === "overview" ? "page" : undefined} className={activeModule === "overview" ? "selected" : ""} type="button" onClick={() => setActiveModule("overview")}>Workspace overview</button>}
                 {modules.filter((module) => currentOrganization ? !session.mfa?.enrollmentRequired || module.id === "security" : module.id === "security").map((module) => <button aria-current={activeModule === module.id ? "page" : undefined} className={activeModule === module.id ? "selected" : ""} type="button" key={module.id} onClick={() => setActiveModule(module.id)}>{module.label}</button>)}
               </nav>
-              <div className="module-content">{activeModule === "security" || session.mfa?.enrollmentRequired || !currentOrganization ? <SecurityPanel mfa={session.mfa} onChanged={securityChanged} /> : activeModule === "overview" ? <WorkspaceOverview onOpen={(id) => setActiveModule(id)} /> : activeModule === "team" ? <TeamPanel organization={currentOrganization} role={currentRole} /> : activeModule === "crm" ? <CRMPanel organization={currentOrganization} role={currentRole} /> : selectedModule ? <ModulePanel module={selectedModule} organization={currentOrganization} role={currentRole} /> : null}</div>
+              <div className="module-content">{showcase && ["security", "team"].includes(activeModule) ? <div className="empty-state"><strong>Connect your charity to manage team access.</strong><p>This sample has a local demonstration account. Two-step verification, invitations, and account recovery belong to your hosted charity workspace.</p><button className="button primary compact" type="button" onClick={() => void window.projectHopeDesktop?.showSetup()}>Connect my charity</button></div> : activeModule === "security" || session.mfa?.enrollmentRequired || !currentOrganization ? <SecurityPanel mfa={session.mfa} onChanged={securityChanged} /> : activeModule === "overview" ? <WorkspaceOverview onOpen={(id) => setActiveModule(id)} /> : activeModule === "team" ? <TeamPanel organization={currentOrganization} role={currentRole} /> : activeModule === "crm" ? <CRMPanel organization={currentOrganization} role={currentRole} /> : ["ai", "email", "translation", "accessibility"].includes(activeModule) ? <AIWorkbench key={activeModule} organization={currentOrganization} runRequest={request} canEdit={["owner", "admin", "coordinator", "staff"].includes(currentRole)} initialOperation={activeModule === "translation" ? "translate-segments" : activeModule === "accessibility" ? "transform-accessibility" : "draft-email"} /> : activeModule === "pwa" ? <div className="empty-state"><strong>{showcase ? "You are already using the desktop app." : "One workspace, on your devices."}</strong><p>{showcase ? "Your sample changes stay on this computer. Connect a hosted charity workspace to share records with your team." : "Use your browser install menu, or download Project Hope and connect this workspace address."}</p><a className="button secondary compact" href="https://project-hope-charities.vercel.app/#download" target="_blank" rel="noreferrer">Desktop downloads</a></div> : selectedModule ? <ModulePanel module={selectedModule} organization={currentOrganization} role={currentRole} /> : null}</div>
             </div>
           </section>
         )}
@@ -1187,7 +1192,7 @@ function FoundingPilotSection() {
               <label className="notes-field">Anything we should know? <small>optional</small><textarea maxLength={2000} placeholder="The challenge, timing, or outcome you care about…" value={values.notes} onChange={(event) => update("notes", event.target.value)} /></label>
               <div className="honeypot" aria-hidden="true"><label>Company website<input autoComplete="off" tabIndex={-1} value={values.company_website} onChange={(event) => update("company_website", event.target.value)} /></label></div>
               <label className="consent-field"><input checked={values.consent_to_contact} required type="checkbox" onChange={(event) => update("consent_to_contact", event.target.checked)} /><span>I agree that Project Hope may email me about this application. I can withdraw at any time.</span></label>
-              <p className="privacy-note">We use these details only to assess and run the pilot. No card is requested. Read the <a href="https://github.com/Fink692/project-hope/blob/main/docs/privacy/pilot-applications.md" target="_blank" rel="noreferrer">pilot privacy notice</a>.</p>
+              <p className="privacy-note">We use these details only to assess and run the pilot. No card is requested. Read the <a href="https://project-hope-charities.vercel.app/privacy#pilot" target="_blank" rel="noreferrer">pilot privacy notice</a>.</p>
               {error && <p className="form-error" role="alert">{error}</p>}
               <button aria-busy={busy} className="button primary pilot-submit" disabled={busy} type="submit">{busy ? "Sending application…" : "Apply for a Founding 10 place"}</button>
             </form>

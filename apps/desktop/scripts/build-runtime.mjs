@@ -1,0 +1,20 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
+
+const desktop = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const repository = path.resolve(desktop, "../..");
+const resources = path.join(desktop, "resources");
+const web = path.join(repository, "apps/web/dist");
+if (!fs.existsSync(path.join(web, "index.html"))) throw new Error("Build apps/web before bundling the desktop runtime.");
+const localPython = path.join(repository, "services/core/.venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
+const python = process.env.PROJECT_HOPE_PYTHON || (fs.existsSync(localPython) ? localPython : "python");
+fs.mkdirSync(resources, { recursive: true });
+const result = spawnSync(python, ["-m", "PyInstaller", "--noconfirm", "--distpath", path.join(resources, "runtime"), "--workpath", path.join(desktop, ".builder-cache/runtime"), path.join(desktop, "scripts/runtime.spec")], { cwd: repository, stdio: "inherit", windowsHide: true });
+if (result.status !== 0) process.exit(result.status || 1);
+const webTarget = path.resolve(resources, "web");
+if (path.dirname(webTarget) !== resources) throw new Error("Unexpected build output path.");
+fs.rmSync(webTarget, { recursive: true, force: true });
+fs.cpSync(web, webTarget, { recursive: true });
+console.log("Complete desktop workspace engine and web application bundled.");

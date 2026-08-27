@@ -2,15 +2,15 @@
 
 ### One calm workspace for the people doing the work.
 
-[![Quality gate](https://github.com/Fink692/project-hope/actions/workflows/ci.yml/badge.svg)](https://github.com/Fink692/project-hope/actions/workflows/ci.yml)
-[![Latest release](https://img.shields.io/github/v/release/Fink692/project-hope?display_name=tag&color=1f7a5a)](https://github.com/Fink692/project-hope/releases/latest)
-[![Data control](https://img.shields.io/badge/data-charity--controlled-235347)](docs/full-build-status.md)
+[Explore Project Hope](https://project-hope-charities.vercel.app) · [Download the desktop preview](https://project-hope-charities.vercel.app/#download) · [Installation help](https://project-hope-charities.vercel.app/guide)
 
 Project Hope gives charities one connected place to coordinate people, programs, volunteers, documents, schedules, grants, communications, and impact work.
 
-It works like a normal app: staff install it, sign in, and get to work. The desktop, iPhone, and Android clients all use the same hosted organization workspace, so nobody has to keep separate copies of the truth.
+Version 1.9 includes a working sample workspace inside the desktop app. Install it and explore fictional contacts, volunteers, schedules, and reviewable writing assistance—without an account, server address, Docker, or database setup. Sample edits persist on your computer.
 
-![Project Hope Founding 10 application and managed pilot offer](docs/assets/founding-10.png)
+The download is a preview, not an automatically provisioned managed charity account. Shared real-world use needs a separately hosted workspace. Generative AI needs compatible local models; otherwise the app clearly labels its limited safety templates. Installers are currently unsigned.
+
+<img src="apps/web/public/hope-mark.png" alt="Project Hope — people and an open doorway forming an H" width="110" />
 
 ### Bring existing contacts without a blind import
 
@@ -47,7 +47,7 @@ The built-in application requires explicit consent, verifies every email, preven
 
 | You are here for… | Go to… |
 |---|---|
-| Installing the app | [Download the latest desktop installers](https://github.com/Fink692/project-hope/releases/latest) |
+| Installing the app | [Download directly from the Project Hope website](https://project-hope-charities.vercel.app/#download) |
 | Running the Founding 10 programme | [Commercial readiness and launch runbook](docs/commercial-readiness.md) |
 | Moving contacts from a spreadsheet | [Move your contacts into Project Hope](docs/MOVING_CONTACTS_FOR_CHARITIES.md) |
 | Announcing the release | [LinkedIn release post](docs/launch/linkedin-release-post.md) |
@@ -59,24 +59,24 @@ The built-in application requires explicit consent, verifies every email, preven
 
 ## The charity experience
 
-1. A setup partner deploys one secure Project Hope workspace.
-2. The partner sends staff the installer or app download link.
-3. Staff install Project Hope, sign in, and start working.
-4. Records, permissions, review history, and updates stay connected across devices.
+1. Download the installer directly from the Project Hope website.
+2. Install and open it; a fictional sample workspace prepares itself automatically.
+3. Explore contacts, schedules, and writing assistance. Your local sample changes are saved.
+4. When a hosted charity workspace is ready, choose “Connect my charity”, enter its website address, and then sign in.
 
 Staff do not install Docker, configure databases, manage backups, learn developer commands, or maintain local copies of the system.
 
 ### Download the desktop app
 
-The [latest release](https://github.com/Fink692/project-hope/releases/latest) includes:
+The [download page](https://project-hope-charities.vercel.app/#download) offers verified installers and on-site installation guidance:
 
 - **Windows:** one-click NSIS installer (`.exe`)
-- **macOS:** disk image and archive (`.dmg`, `.zip`)
+- **macOS:** Apple-silicon disk image (`.dmg`); not an Intel-Mac build
 - **Linux:** AppImage and Debian package (`.AppImage`, `.deb`)
 
-A generic desktop installer asks for the organization’s Project Hope address once, checks the connection, remembers it, and opens the workspace from then on. A setup partner can also build a preconfigured installer so staff only install and open it.
+The generic installer now opens an included sample by default. It can also remember a separately hosted organization workspace. The connection screen needs a website address, not an email; account credentials come on the hosted sign-in screen.
 
-ChromeOS and supported browsers can use the browser-installable version. iPhone and Android builds use the same sign-in and hosted workspace; publishing them to the App Store and Google Play requires the organization’s own developer accounts and signing credentials.
+ChromeOS and supported browsers can use the browser-installable version of a hosted workspace. Mobile-client foundations are included in the codebase, but App Store and Google Play releases are not available from this site.
 
 ## What is inside
 

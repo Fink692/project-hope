@@ -1320,7 +1320,8 @@ def translate_local(text, source, target, glossary):
 
 class AIOperationView(TenantView):
     def post(self, request, slug, operation):
-        organization, _ = self.organization(request, slug)
+        organization, membership = self.organization(request, slug)
+        require_editor(membership)
         payload = request.data if isinstance(request.data, dict) else {}
         workflow = Workflow.objects.create(
             organization=organization,
@@ -1690,6 +1691,8 @@ class AIOperationView(TenantView):
                     "state": workflow.state,
                     "output": output,
                     "riskFlags": risk_flags,
+                    "modelIdentifier": workflow.model_identifier,
+                    "runtime": workflow.runtime,
                 }
             )
         except Exception as exc:

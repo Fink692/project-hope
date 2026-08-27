@@ -29,6 +29,11 @@ jobs:
         working-directory: apps/desktop
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: services/core/requirements-desktop.txt
       - uses: pnpm/action-setup@v6
         with:
           version: 11.9.0
@@ -37,9 +42,13 @@ jobs:
           node-version: 22
           cache: pnpm
           cache-dependency-path: apps/desktop/pnpm-lock.yaml
+      - run: python -m pip install -r ../../services/core/requirements-desktop.txt
       - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir ../web install --frozen-lockfile
       - run: pnpm audit --prod
-      - run: pnpm run build
+      - run: pnpm run build:bundle
+      - run: pnpm test
+      - run: pnpm test:runtime
       - name: Build Windows installer
         if: matrix.target == 'win'
         run: pnpm exec electron-builder --win --publish never

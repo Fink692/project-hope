@@ -113,6 +113,36 @@ jobs:
       - run: pnpm build
       - run: pnpm exec tsc -p ../../packages/api-client/tsconfig.json
 
+  site:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/site
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: apps/site/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm audit --prod
+      - run: pnpm test
+      - run: pnpm lint
+      - run: pnpm build
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Check the real website in a browser
+        run: |
+          pnpm start --port 5180 > /tmp/hope-site.log 2>&1 &
+          for attempt in $(seq 1 45); do
+            if curl --fail --silent http://localhost:5180 > /dev/null; then break; fi
+            sleep 1
+          done
+          pnpm test:e2e
+
   mobile:
     runs-on: ubuntu-latest
     defaults:
@@ -141,6 +171,11 @@ jobs:
         working-directory: apps/desktop
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: services/core/requirements-desktop.txt
       - uses: pnpm/action-setup@v6
         with:
           version: 11.9.0
@@ -151,7 +186,12 @@ jobs:
           cache-dependency-path: apps/desktop/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: pnpm audit --prod
-      - run: pnpm run build
+      - run: pnpm test
+      - run: python -m pip install -r ../../services/core/requirements-desktop.txt pip-audit==2.10.1
+      - run: python -m pip_audit -r ../../services/core/requirements-desktop.txt
+      - run: pnpm --dir ../web install --frozen-lockfile
+      - run: pnpm build:bundle
+      - run: pnpm test:runtime
 
   compose:
     runs-on: ubuntu-latest

@@ -1,0 +1,10 @@
+node_modules
+.next
+.vinext
+.wrangler
+outputs
+work
+test-results
+playwright-report
+artifacts
+*.tsbuildinfo
