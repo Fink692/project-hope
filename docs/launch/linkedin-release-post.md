@@ -1,8 +1,8 @@
-# LinkedIn release post — Project Hope 1.9.1
+# LinkedIn release post — Project Hope 1.9.2
 
 ## Post
 
-After a long time building, testing, and reworking the details, I’m proud to release Project Hope 1.9.1. 🌱
+After a long time building, testing, and reworking the details, I’m proud to release Project Hope 1.9.2. 🌱
 
 Less admin. More human.
 
