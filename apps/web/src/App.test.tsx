@@ -26,7 +26,8 @@ describe("Project Hope web shell", () => {
     expect(screen.getByRole("link", { name: "Skip to main content" })).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Primary navigation" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Get started" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Download installer" })).toHaveAttribute("href", "https://github.com/Fink692/project-hope/releases/latest");
+    expect(screen.getByRole("link", { name: "Download installer" })).toHaveAttribute("href", "https://project-hope-charities.vercel.app/#download");
+    expect(document.querySelectorAll('a[href*="github.com"]')).toHaveLength(0);
     expect(screen.getByRole("heading", { name: "Be one of the Founding 10." })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "You should not need to be technical to get started." })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Install Project Hope like an app." })).toBeInTheDocument();

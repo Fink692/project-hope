@@ -1,28 +1,28 @@
 {
-  "version": "1.9.0",
+  "version": "1.9.1",
   "channel": "Desktop preview",
   "published": false,
   "assets": [
     {
-      "file": "Project-Hope-1.9.0-win-x64.exe",
+      "file": "Project-Hope-1.9.1-win-x64.exe",
       "bytes": 0,
       "sha256": "",
       "available": false
     },
     {
-      "file": "Project-Hope-1.9.0-mac-arm64.dmg",
+      "file": "Project-Hope-1.9.1-mac-arm64.dmg",
       "bytes": 0,
       "sha256": "",
       "available": false
     },
     {
-      "file": "Project-Hope-1.9.0-linux-x86_64.AppImage",
+      "file": "Project-Hope-1.9.1-linux-x86_64.AppImage",
       "bytes": 0,
       "sha256": "",
       "available": false
     },
     {
-      "file": "Project-Hope-1.9.0-linux-amd64.deb",
+      "file": "Project-Hope-1.9.1-linux-amd64.deb",
       "bytes": 0,
       "sha256": "",
       "available": false

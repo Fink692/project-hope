@@ -20,7 +20,7 @@ try {
   page.on("pageerror", (error) => errors.push(error.message));
   await page.locator(".workspace").waitFor({ timeout: 120_000 });
   const version = await application.evaluate(({ app }) => app.getVersion());
-  assert.equal(version, "1.9.0");
+  assert.equal(version, "1.9.1");
   assert.match(page.url(), /^http:\/\/127\.0\.0\.1:\d+/);
   assert.equal(await page.locator("a[href*='github']").count(), 0);
   await page.locator(".showcase-banner").waitFor({ timeout: 15_000 });
