@@ -6,6 +6,7 @@ import test from "node:test";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const manifest = JSON.parse(fs.readFileSync(path.join(root, "lib/release-manifest.json"), "utf8"));
 const config = JSON.parse(fs.readFileSync(path.join(root, "vercel.json"), "utf8"));
+const delivery = JSON.parse(fs.readFileSync(path.join(root, "delivery.config.json"), "utf8"));
 test("every advertised installer is versioned, unique, and integrity-checked", () => {
   assert.equal(new Set(manifest.assets.map((asset) => asset.file)).size, manifest.assets.length);
   for (const asset of manifest.assets) {
@@ -30,8 +31,8 @@ test("the new logo and on-site help routes exist", () => {
   for (const route of ["guide", "privacy", "release-notes"]) assert.ok(fs.existsSync(path.join(root, "app", route, "page.tsx")));
 });
 test("download responses are attachments and cannot be interpreted as HTML", () => {
-  const downloadHeaders = config.headers.find((rule) => rule.source.startsWith("/downloads/")).headers;
+  const downloadHeaders = delivery.headers.find((rule) => rule.source.startsWith("/downloads/")).headers;
   assert.ok(downloadHeaders.some((header) => header.key === "Content-Disposition" && header.value === "attachment"));
-  assert.ok(config.headers[0].headers.some((header) => header.key === "X-Content-Type-Options" && header.value === "nosniff"));
-  for (const rewrite of config.rewrites || []) assert.doesNotMatch(rewrite.destination, /github|api\.github/i);
+  assert.ok(delivery.headers[0].headers.some((header) => header.key === "X-Content-Type-Options" && header.value === "nosniff"));
+  for (const rewrite of delivery.rewrites) assert.match(new URL(rewrite.destination).hostname, /^[a-z0-9]+\.public\.blob\.vercel-storage\.com$/);
 });

@@ -41,15 +41,15 @@ export default function Home() {
       <div className="feature-grid">
         <article className="feature-card" data-reveal>
           <div className="feature-art people-art" aria-hidden="true"><span className="person person-a">AR</span><span className="person person-b">JM</span><span className="person person-c">SC</span><i className="connection-line" /><b className="art-check">✓</b></div>
-          <span className="feature-number">01 / PEOPLE</span><h3>Every connection,<br />cared for.</h3><p>Bring in your contact spreadsheet, review duplicates, and keep conversations connected to the right person.</p><a className="feature-link" href="#tour">A home for your contacts <span aria-hidden="true">↗</span></a>
+          <span className="feature-number">01 / PEOPLE</span><h3>Every connection,<br /> cared for.</h3><p>Bring in your contact spreadsheet, review duplicates, and keep conversations connected to the right person.</p><a className="feature-link" href="#tour">A home for your contacts <span aria-hidden="true">↗</span></a>
         </article>
         <article className="feature-card" data-reveal data-delay="1">
           <div className="feature-art schedule-art" aria-hidden="true"><div className="mini-calendar"><span>THIS WEEK</span><div><i>M</i><i>T</i><i>W</i><i>T</i><i>F</i></div><div><b>12</b><b>13</b><b className="calendar-day">14</b><b>15</b><b>16</b></div></div><span className="calendar-label"><i /> Community pantry</span></div>
-          <span className="feature-number">02 / COORDINATION</span><h3>Make room for<br />the good work.</h3><p>Organize volunteer applications and schedules, with the everyday context your coordinators need.</p><a className="feature-link" href="#how-it-works">See how to get started <span aria-hidden="true">↗</span></a>
+          <span className="feature-number">02 / COORDINATION</span><h3>Make room for<br /> the good work.</h3><p>Organize volunteer applications and schedules, with the everyday context your coordinators need.</p><a className="feature-link" href="#how-it-works">See how to get started <span aria-hidden="true">↗</span></a>
         </article>
         <article className="feature-card" data-reveal data-delay="2">
           <div className="feature-art writing-art" aria-hidden="true"><div className="mini-draft"><span>Thank you for being here.</span><i /><i /><i /></div><span className="draft-label"><b>✳</b> A draft. Your decision.</span></div>
-          <span className="feature-number">03 / ASSISTANCE</span><h3>A starting point<br />for the words.</h3><p>Prepare a reply, translate a message, or make a notice clearer. Review every draft before using it.</p><Link className="feature-link" href="/guide#ai">Meet the writing assistant <span aria-hidden="true">↗</span></Link>
+          <span className="feature-number">03 / ASSISTANCE</span><h3>A starting point<br /> for the words.</h3><p>Prepare a reply, translate a message, or make a notice clearer. Review every draft before using it.</p><Link className="feature-link" href="/guide#ai">Meet the writing assistant <span aria-hidden="true">↗</span></Link>
         </article>
       </div>
     </section>

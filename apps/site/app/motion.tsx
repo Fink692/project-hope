@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -94,6 +94,18 @@ export function Brand({ footer = false }: { footer?: boolean }) {
 
 export function SiteHeader() {
   const [open, setOpen] = useState(false);
+  const toggle = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const dismiss = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+        toggle.current?.focus();
+      }
+    };
+    document.addEventListener("keydown", dismiss);
+    return () => document.removeEventListener("keydown", dismiss);
+  }, [open]);
   return <>
     <a className="skip" href="#main">Skip to content</a>
     <div className="scroll-progress" aria-hidden="true" />
@@ -105,7 +117,7 @@ export function SiteHeader() {
         </nav>
         <div className="header-actions">
           <Link className="button small" href="/#download">Get Project Hope <span aria-hidden="true">↗</span></Link>
-          <button className="menu-toggle" type="button" aria-label={open ? "Close navigation" : "Open navigation"} aria-expanded={open} aria-controls="main-nav" onClick={() => setOpen(!open)}><span /><span /></button>
+          <button ref={toggle} className="menu-toggle" type="button" aria-label={open ? "Close navigation" : "Open navigation"} aria-expanded={open} aria-controls="main-nav" onClick={() => setOpen(!open)}><span /><span /></button>
         </div>
       </div>
     </header>

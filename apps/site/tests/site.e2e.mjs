@@ -49,6 +49,10 @@ try {
     if (width < 800) {
       await page.getByRole("button", { name: "Open navigation" }).click();
       assert.equal(await page.getByRole("button", { name: "Close navigation" }).getAttribute("aria-expanded"), "true");
+      await page.keyboard.press("Escape");
+      assert.equal(await page.getByRole("button", { name: "Open navigation" }).getAttribute("aria-expanded"), "false");
+      assert.equal(await page.getByRole("button", { name: "Open navigation" }).evaluate((element) => element === document.activeElement), true);
+      await page.getByRole("button", { name: "Open navigation" }).click();
       await page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "A little help" }).click();
       await page.waitForURL("**/guide");
       assert.equal(await page.getByRole("button", { name: "Open navigation" }).getAttribute("aria-expanded"), "false");
