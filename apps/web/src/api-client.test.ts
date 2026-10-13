@@ -100,12 +100,14 @@ describe("HopeApiClient CRM migration", () => {
     );
     expect(downloaded.filename).toBe("project hope.csv");
     expect(downloaded.contentType).toBe("text/csv; charset=utf-8");
-    const content = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = () => reject(reader.error);
-      reader.readAsText(downloaded.blob);
-    });
+    const content = typeof downloaded.blob.text === "function"
+      ? await downloaded.blob.text()
+      : await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result));
+          reader.onerror = () => reject(reader.error);
+          reader.readAsText(downloaded.blob);
+        });
     expect(content).toContain("Amina");
   });
 
