@@ -100,7 +100,13 @@ describe("HopeApiClient CRM migration", () => {
     );
     expect(downloaded.filename).toBe("project hope.csv");
     expect(downloaded.contentType).toBe("text/csv; charset=utf-8");
-    expect(await downloaded.blob.text()).toContain("Amina");
+    const content = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsText(downloaded.blob);
+    });
+    expect(content).toContain("Amina");
   });
 
   it("surfaces plain-text service errors instead of hiding them", async () => {
